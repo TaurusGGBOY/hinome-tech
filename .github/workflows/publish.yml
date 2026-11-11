@@ -1,0 +1,84 @@
+name: Verify and publish 火市 技術課
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing pre-release tag on this main commit. Leave empty to verify only.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hinome-tech-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'TaurusGGBOY/hinome-tech' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64, hinome-tech-cloud]
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PUBLIC_URL: https://hinome-tech.pages.dev/
+      CHROME_PATH: /opt/hinome-ci-tools/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js from the Aliyun runner
+        run: echo "/opt/hinome-ci-tools/bin" >> "$GITHUB_PATH"
+
+      - name: Verify candidate in the browser
+        run: |
+          npm ci
+          node scripts/browser-smoke.cjs
+
+      - name: Verify the release tag refers to this candidate
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")" = "$GITHUB_SHA"
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease |
+            jq -e '.isPrerelease and (.isDraft | not)' >/dev/null
+
+      - name: Publish to Cloudflare Pages
+        if: inputs.release_tag != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::error::Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in this repository."
+            exit 1
+          fi
+          npx --yes wrangler@4.152.0 pages deploy public \
+            --project-name hinome-tech --branch main --commit-hash "$GITHUB_SHA"
+
+      - name: Verify the published site
+        if: inputs.release_tag != ''
+        run: |
+          while IFS= read -r -d '' file; do
+            relative_path="${file#public/}"
+            if [[ "$relative_path" == index.html ]]; then
+              relative_path=""
+            fi
+            if ! curl --compressed --retry 2 --connect-timeout 10 --max-time 30 -fsSL "$PUBLIC_URL$relative_path" | cmp -s "$file" -; then
+              echo "::error::The public response differs from $file."
+              exit 1
+            fi
+          done < <(find public -type f -print0)
+          node scripts/browser-smoke.cjs "$PUBLIC_URL"
+
+      - name: Mark the verified release as stable
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --prerelease=false --latest
