@@ -55,7 +55,7 @@
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
         a.setAttribute('aria-label', `${item.title}（在新标签页打开）`);
-        a.innerHTML = `<div class="card-top"><span class="card-icon">${svg(item.icon)}</span><span class="arrow" aria-hidden="true">↗</span></div><h4></h4><p></p><div class="tags"></div>`;
+        a.innerHTML = `<span class="card-icon">${svg(item.icon)}</span><div class="card-body"><h4></h4><p></p><div class="tags"></div></div><span class="arrow" aria-hidden="true">↗</span>`;
         a.querySelector('h4').textContent = item.title;
         a.querySelector('p').textContent = item.description;
         for (const tag of item.tags) {
