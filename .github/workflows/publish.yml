@@ -1,10 +1,10 @@
-name: Verify and publish 火市 技術課
+name: Verify 火市 技術課
 
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing pre-release tag on this main commit. Leave empty to verify only.'
+        description: 'Uploaded pre-release tag. Leave empty to verify the local candidate only.'
         required: false
         type: string
 
@@ -40,27 +40,15 @@ jobs:
           npm ci
           node scripts/browser-smoke.cjs
 
-      - name: Verify the release tag refers to this candidate
+      - name: Verify the release tag contains the same site
         if: inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test "$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")" = "$GITHUB_SHA"
+          tagged_commit="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
+          git diff --exit-code "$tagged_commit" "$GITHUB_SHA" -- public/
           gh release view "$RELEASE_TAG" --json isDraft,isPrerelease |
             jq -e '.isPrerelease and (.isDraft | not)' >/dev/null
-
-      - name: Publish to Cloudflare Pages
-        if: inputs.release_tag != ''
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
-            echo "::error::Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in this repository."
-            exit 1
-          fi
-          npx --yes wrangler@4.152.0 pages deploy public \
-            --project-name hinome-tech --branch main --commit-hash "$GITHUB_SHA"
 
       - name: Verify the published site
         if: inputs.release_tag != ''

@@ -26,16 +26,27 @@ npm run test:browser
 
 ## 发布
 
-工作流只在此仓库的 `main` 手动运行，使用上海阿里云专属 runner。Cloudflare Pages 项目为 `hinome-tech`，发布凭据保存在仓库的 Actions Secrets。验证模式可在未配置 Cloudflare 凭据时运行。
+GitHub Actions 只在此仓库的 `main` 手动运行，使用上海阿里云专属 runner。Cloudflare Pages 项目为 `hinome-tech`。上传使用已登录的 Wrangler，GitHub 仓库无需另配 Cloudflare 密钥。
 
-```sh
-gh workflow run publish.yml --ref main
-```
+1. 推送要发布的版本，创建指向该提交的 Pre-release 并写明变更。
+2. 触发阿里云候选浏览器验收，确认通过后再上传。
 
-发布时先从已推送的 `main` 创建 Pre-release，并填写当版变更说明。将候选的标签传给同一工作流。
+   ```sh
+   gh workflow run publish.yml --ref main
+   ```
 
-```sh
-gh workflow run publish.yml --ref main -f release_tag=v0.1.0
-```
+3. 从 Git 标签解出已验收的 `public/`，通过现有 Cloudflare 登录上传。
 
-工作流先验证本地候选和标签对应的提交，然后部署 Cloudflare Pages。公网浏览器验收通过后，候选会晋升为正式 Release。
+   ```sh
+   release_tag=v0.1.0
+   candidate_dir="$(mktemp -d /tmp/codextmp/hinome-tech.XXXXXX)"
+   git archive "$release_tag" public | tar -x -C "$candidate_dir"
+   wrangler pages deploy "$candidate_dir/public" --project-name hinome-tech --branch main \
+     --commit-hash "$(git rev-parse "$release_tag^{commit}")"
+   ```
+
+4. 触发阿里云公网验收。工作流会比对公网文件并运行桌面、手机浏览器测试，通过后晋升 Release。
+
+   ```sh
+   gh workflow run publish.yml --ref main -f release_tag=v0.1.0
+   ```
