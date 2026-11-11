@@ -43,6 +43,9 @@ async function main() {
     url = `http://127.0.0.1:${server.address().port}/`;
   }
   const options = { headless: true };
+  if (process.argv[2] && process.env.CHROME_PROXY) {
+    options.proxy = { server: process.env.CHROME_PROXY };
+  }
   if (process.env.CHROME_PATH) options.executablePath = process.env.CHROME_PATH;
   let browser;
   try {

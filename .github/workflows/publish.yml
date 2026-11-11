@@ -52,6 +52,9 @@ jobs:
 
       - name: Verify the published site
         if: inputs.release_tag != ''
+        env:
+          HTTPS_PROXY: http://127.0.0.1:7890
+          CHROME_PROXY: http://127.0.0.1:7890
         run: |
           while IFS= read -r -d '' file; do
             relative_path="${file#public/}"
@@ -59,7 +62,7 @@ jobs:
               relative_path=""
             fi
             if ! curl --compressed --retry 2 --connect-timeout 10 --max-time 30 -fsSL "$PUBLIC_URL$relative_path" | cmp -s "$file" -; then
-              echo "::error::The public response differs from $file."
+              echo "::error::Could not match the public response to $file."
               exit 1
             fi
           done < <(find public -type f -print0)

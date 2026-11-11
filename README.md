@@ -45,7 +45,7 @@ GitHub Actions 只在此仓库的 `main` 手动运行，使用上海阿里云专
      --commit-hash "$(git rev-parse "$release_tag^{commit}")"
    ```
 
-4. 触发阿里云公网验收。工作流会比对公网文件并运行桌面、手机浏览器测试，通过后晋升 Release。
+4. 触发阿里云公网验收。工作流通过上海主机现有网络代理比对公网文件，并运行桌面、手机浏览器测试，通过后晋升 Release。
 
    ```sh
    gh workflow run publish.yml --ref main -f release_tag=v0.1.0
