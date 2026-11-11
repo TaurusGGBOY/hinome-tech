@@ -26,6 +26,7 @@ async function main() {
         '.js': 'text/javascript',
         '.webp': 'image/webp',
         '.svg': 'image/svg+xml',
+        '.png': 'image/png',
       };
       fs.readFile(file, (err, data) => {
         if (err) {
@@ -62,9 +63,103 @@ async function main() {
       });
       const response = await page.goto(url, { waitUntil: 'networkidle' });
       assert.equal(response.status(), 200);
-      const initialCount = await page.locator('.card').count();
+      const initialCount = await page.locator('.item').count();
       assert(initialCount >= 6);
       assert.equal(await page.locator('.group').count(), 3);
+      assert.deepEqual(await page.locator('.group h2').allTextContents(), [
+        '工具',
+        '百科',
+        '二创',
+      ]);
+      const expectedIcons = {
+        火の眼: 'eye',
+        万舰的风景: 'voyage',
+        火羽舰队: 'fleet',
+        火羽ひのめ百科: 'encyclopedia',
+        '火羽ひのめ 情报屋': 'profile',
+        绝对不会抛下B站去其他地方的日本vtuber: 'original',
+        '2022年10月12日火羽生日会直播录像': 'replay',
+        '《信》': 'letter',
+        '《誓火未熄》': 'anthem',
+      };
+      for (const [title, slug] of Object.entries(expectedIcons)) {
+        const icon = page
+          .getByRole('link', {
+            name: `${title}（在新标签页打开）`,
+            exact: true,
+          })
+          .locator('img');
+        assert.equal(await icon.count(), 1, title);
+        assert.equal(
+          await icon.evaluate((el) => el.complete && el.naturalWidth > 0),
+          true,
+          `${title}: image loaded`,
+        );
+        assert.equal(
+          new URL(await icon.getAttribute('src'), url).pathname
+            .split('/')
+            .pop(),
+          `${slug}.png`,
+          title,
+        );
+      }
+      assert.equal(
+        await page
+          .locator('.site-icon')
+          .evaluate((el) => el.complete && el.naturalWidth > 0),
+        true,
+      );
+      await page.locator('#palette summary').click();
+      assert.equal(await page.locator('#transparency').inputValue(), '100');
+      assert.equal(
+        await page.locator('#transparency-value').textContent(),
+        '100%',
+      );
+      await page.locator('#panel-color').fill('#6a454a');
+      assert.equal(
+        await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue('--panel-color'),
+        ),
+        '#6a454a',
+      );
+      await page.locator('#title-color').fill('#abcdef');
+      assert.equal(
+        await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue('--title-color'),
+        ),
+        '#abcdef',
+      );
+      await page.locator('#transparency').fill('35');
+      assert.equal(
+        await page.locator('#transparency-value').textContent(),
+        '35%',
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue('--panel-opacity'),
+        ),
+        '65%',
+      );
+      await page.locator('#scene-transparency').fill('25');
+      assert.equal(
+        await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue('--scene-opacity'),
+        ),
+        '0.75',
+      );
+      await page.locator('#reset-palette').click();
+      assert.equal(await page.locator('#transparency').inputValue(), '100');
+      assert.equal(await page.locator('#scene-transparency').inputValue(), '0');
+      assert.equal(await page.locator('#panel-color').inputValue(), '#30465e');
+      assert.equal(await page.locator('#title-color').inputValue(), '#ffad78');
+      assert.equal(
+        await page.evaluate(() =>
+          document.documentElement.style.getPropertyValue('--panel-opacity'),
+        ),
+        '0%',
+      );
+      await page.locator('#palette summary').click();
+
       assert.equal(await page.locator('h1').innerText(), '火市 技術課');
       assert.equal(
         await page.evaluate(
@@ -83,10 +178,10 @@ async function main() {
       await input.fill('完全不存在的搜索');
       assert.equal(await page.locator('#empty').isVisible(), true);
       await page.locator('#empty-clear').click();
-      assert.equal(await page.locator('.card').count(), initialCount);
+      assert.equal(await page.locator('.item').count(), initialCount);
       await input.fill('生日');
       await page.locator('#clear').click();
-      assert.equal(await page.locator('.card').count(), initialCount);
+      assert.equal(await page.locator('.item').count(), initialCount);
       await page.locator('body').click({ position: { x: 5, y: 5 } });
       await page.keyboard.press('Control+k');
       assert.equal(
@@ -102,7 +197,7 @@ async function main() {
           new InputEvent('input', { bubbles: true, isComposing: true }),
         );
       });
-      assert.equal(await page.locator('.card').count(), initialCount);
+      assert.equal(await page.locator('.item').count(), initialCount);
       await input.evaluate((el) => {
         el.value = '舰长';
         el.dispatchEvent(
@@ -113,7 +208,7 @@ async function main() {
       assert.equal(await page.getByRole('link', { name: /火の眼/ }).count(), 0);
       await page.locator('#clear').click();
       const links = await page
-        .locator('.card')
+        .locator('.item')
         .evaluateAll((nodes) =>
           nodes.map((a) => ({ href: a.href, target: a.target, rel: a.rel })),
         );
@@ -126,7 +221,7 @@ async function main() {
             a.rel.includes('noopener'),
         ),
       );
-      const first = page.locator('.card').first();
+      const first = page.locator('.item').first();
       const popupPromise = page.waitForEvent('popup');
       await page
         .context()
@@ -146,7 +241,7 @@ async function main() {
         });
       }
       console.log(
-        `${name}: initial, search, aliases, empty, clear, shortcut, IME, external link, overflow and console passed`,
+        `${name}: initial, order, icons, palette, search, aliases, empty, clear, shortcut, IME, external link, overflow and console passed`,
       );
       await page.close();
     }

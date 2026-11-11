@@ -2,81 +2,121 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#141d2a" />
-    <meta
-      name="description"
-      content="汇集与火羽ひのめ有关的工具、作品和百科资料。"
-    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#283d53" />
+    <meta name="description" content="火羽相关工具、百科与二创资源导航。" />
     <title>火市 技術課 · 火市・技术科</title>
-    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="assets/site.png" />
     <link rel="stylesheet" href="style.css" />
     <script src="resources.js" defer></script>
+    <script src="catalog.js" defer></script>
     <script src="app.js" defer></script>
+    <script src="palette.js" defer></script>
   </head>
   <body>
     <a class="skip" href="#catalog">跳至资源目录</a>
-    <header class="hero">
-      <div class="hero-image" aria-hidden="true"></div>
-      <div class="shell hero-content">
-        <div class="masthead">
-          <div class="brand">
-            <span class="seal" aria-hidden="true">火</span>
-            <div>
-              <h1 lang="ja">火市 技術課</h1>
-              <p>火市・技术科</p>
-            </div>
+    <div class="page">
+      <details class="palette" id="palette">
+        <summary class="glass-control" data-glass>调色盘</summary>
+        <div class="palette-controls">
+          <label class="palette-row" for="panel-color"
+            >面板颜色
+            <input type="color" id="panel-color" value="#30465e" />
+          </label>
+          <div class="swatches" role="group" aria-label="面板预设颜色">
+            <button
+              type="button"
+              data-color="#30465e"
+              style="--swatch: #30465e"
+              aria-label="湖蓝灰"
+              title="湖蓝灰"
+            ></button>
+            <button
+              type="button"
+              data-color="#3d5050"
+              style="--swatch: #3d5050"
+              aria-label="松烟青"
+              title="松烟青"
+            ></button>
+            <button
+              type="button"
+              data-color="#62505f"
+              style="--swatch: #62505f"
+              aria-label="暮紫"
+              title="暮紫"
+            ></button>
+            <button
+              type="button"
+              data-color="#6a454a"
+              style="--swatch: #6a454a"
+              aria-label="枫叶红"
+              title="枫叶红"
+            ></button>
           </div>
-          <div class="search-area">
-            <label class="sr-only" for="search">搜索资源</label>
-            <div class="search-box">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.5" cy="10.5" r="6.5" />
-                <path d="m15.5 15.5 4.5 4.5" />
-              </svg>
-              <input
-                id="search"
-                type="search"
-                placeholder="搜索名称、简介或标签"
-                autocomplete="off"
-              /><kbd>⌘ / Ctrl K</kbd
-              ><button id="clear" type="button" aria-label="清除搜索" hidden>
-                ×
-              </button>
-            </div>
+          <label class="palette-row" for="title-color"
+            >标题颜色
+            <input type="color" id="title-color" value="#ffad78" />
+          </label>
+          <label class="palette-row" for="transparency"
+            >面板透明度
+            <output id="transparency-value" for="transparency">100%</output>
+          </label>
+          <input type="range" id="transparency" min="0" max="100" value="100" />
+          <label class="palette-row" for="scene-transparency"
+            >背景透明度
+            <output id="scene-transparency-value" for="scene-transparency"
+              >0%</output
+            >
+          </label>
+          <input
+            type="range"
+            id="scene-transparency"
+            min="0"
+            max="100"
+            value="0"
+          />
+          <button type="button" id="reset-palette">恢复默认</button>
+        </div>
+      </details>
+      <header class="header">
+        <div class="brand">
+          <img
+            class="site-icon"
+            src="assets/site.png"
+            alt=""
+            width="42"
+            height="42"
+          />
+          <div>
+            <h1 lang="ja">火市 技術課</h1>
+            <p>火市・技术科</p>
           </div>
         </div>
-        <div class="hero-copy">
-          <p class="intro">火羽相关工具、二创与百科</p>
-          <p class="hero-note">非官方粉丝资源导航</p>
+        <p class="intro">火羽相关工具、百科与二创</p>
+        <label class="sr-only" for="search">搜索资源</label>
+        <div class="search glass-control" data-glass>
+          <span class="search-mark" aria-hidden="true"></span
+          ><input
+            id="search"
+            type="search"
+            placeholder="搜索名称、简介或标签"
+            autocomplete="off"
+          /><kbd>⌘ / Ctrl K</kbd
+          ><button id="clear" type="button" aria-label="清除搜索" hidden>
+            ×
+          </button>
         </div>
-      </div>
-    </header>
-    <main id="catalog" class="shell catalog" tabindex="-1">
-      <div class="catalog-top">
-        <h2>资源目录</h2>
-      </div>
-      <p
-        id="search-status"
-        class="sr-only"
-        role="status"
-        aria-live="polite"
-      ></p>
-      <div id="groups"></div>
-      <div id="empty" class="empty" hidden>
-        <span aria-hidden="true">✳</span>
-        <h3>没有找到相关资源</h3>
-        <p>换个关键词试试，或清除搜索查看全部。</p>
-        <button id="empty-clear" type="button">清除搜索</button>
-      </div>
-    </main>
-    <footer>
-      <div class="shell footer-inner">
-        <div>
-          <strong lang="ja">火市 技術課</strong>
-          <p>火市・技术科 · 非官方粉丝导航</p>
-        </div>
-      </div>
-    </footer>
+      </header>
+      <main id="catalog" tabindex="-1">
+        <p id="status" class="sr-only" role="status" aria-live="polite"></p>
+        <div id="groups"></div>
+        <section class="empty" id="empty" hidden>
+          <h2>没有找到相关资源</h2>
+          <p>试试其他名称或标签。</p>
+          <button id="empty-clear" type="button">清除搜索</button>
+        </section>
+      </main>
+      <footer><span>非官方粉丝导航</span></footer>
+    </div>
   </body>
 </html>
