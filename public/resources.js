@@ -27,6 +27,14 @@ window.RESOURCE_GROUPS = [
         aliases: ['HANE VOYAGE', '舰队'],
         url: 'https://hane-lab.github.io/HANE-VOYAGE/',
       },
+      {
+        title: '千舰史料 · 直播回放检索',
+        icon: 'replay',
+        description: '检索火羽 2022 年 10 月 10 日至 13 日四场直播的双语字幕、弹幕、SC 和上舰记录。',
+        tags: ['千舰', '历史回放', '双语字幕'],
+        aliases: ['千舰回放', '千舰纪念', 'renode-editor'],
+        url: 'https://hinome.renode-editor.com/',
+      },
     ],
   },
   {

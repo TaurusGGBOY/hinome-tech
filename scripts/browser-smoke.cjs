@@ -75,6 +75,7 @@ async function main() {
         火の眼: 'eye',
         万舰的风景: 'voyage',
         火羽舰队: 'fleet',
+        '千舰史料 · 直播回放检索': 'replay',
         火羽ひのめ百科: 'encyclopedia',
         '火羽ひのめ 情报屋': 'profile',
         绝对不会抛下B站去其他地方的日本vtuber: 'original',
@@ -175,6 +176,17 @@ async function main() {
       await input.fill('HANE VOYAGE');
       assert(await page.getByRole('link', { name: /火羽舰队/ }).isVisible());
       assert.equal(await page.getByRole('link', { name: /火の眼/ }).count(), 0);
+      await input.fill('千舰');
+      const archive = page.getByRole('link', { name: /千舰史料/ });
+      assert(await archive.isVisible());
+      assert.equal(
+        await archive.getAttribute('href'),
+        'https://hinome.renode-editor.com/',
+      );
+      assert.equal(
+        await archive.locator('xpath=ancestor::section').locator('h2').innerText(),
+        '工具',
+      );
       await input.fill('完全不存在的搜索');
       assert.equal(await page.locator('#empty').isVisible(), true);
       await page.locator('#empty-clear').click();
