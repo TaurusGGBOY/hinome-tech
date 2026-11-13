@@ -52,9 +52,12 @@
           link.append(icon, body, arrow);
           li.append(link);
           if (item.about) {
-            const about = document.createElement('a');
-            about.className = 'item-about';
-            about.href = item.about;
+            const about = document.createElement('button');
+            about.type = 'button';
+            about.className = 'item-about about-trigger';
+            about.dataset.dialog = item.about;
+            about.setAttribute('aria-haspopup', 'dialog');
+            about.setAttribute('aria-controls', item.about);
             about.textContent = `关于${item.title}`;
             li.append(about);
           }
@@ -71,4 +74,15 @@
   document
     .querySelector('#empty-clear')
     .addEventListener('click', controls.reset);
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('button[data-dialog]');
+    if (!trigger) return;
+    const dialog = document.getElementById(trigger.dataset.dialog);
+    dialog.addEventListener('close', () => trigger.focus(), { once: true });
+    dialog.showModal();
+  });
+
+  const linkedDialog = document.getElementById(location.hash.slice(1));
+  if (linkedDialog instanceof HTMLDialogElement) linkedDialog.showModal();
 })();

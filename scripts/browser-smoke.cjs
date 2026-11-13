@@ -134,19 +134,36 @@ async function main() {
       );
       assert(tagGaps.every((gap) => Math.abs(gap - 10) < 0.5));
 
-      await page.getByRole('link', { name: '关于火の眼', exact: true }).click();
-      assert.equal(new URL(page.url()).hash, '#hinome-eye');
-      assert(await page.getByRole('heading', { name: '关于火の眼' }).isVisible());
+      const homeUrl = page.url();
+      const eyeTrigger = page.getByRole('button', { name: '关于火の眼', exact: true });
+      await eyeTrigger.click();
+      const eyeDialog = page.getByRole('dialog', { name: '关于火の眼' });
+      assert(await eyeDialog.isVisible());
+      assert.equal(page.url(), homeUrl);
       assert.equal(
         await page.getByRole('link', { name: '打开火の眼' }).getAttribute('href'),
         'https://best-hinome.pages.dev/',
       );
-      await page.getByRole('link', { name: /返回资源目录/ }).click();
-      await page.locator('header').getByRole('link', { name: '关于本站' }).click();
-      assert(await page.getByRole('heading', { name: '关于本站', level: 1 }).isVisible());
-      assert(await page.getByRole('link', { name: 'GitHub 反馈' }).isVisible());
+      await page.keyboard.press('Escape');
+      assert.equal(await eyeDialog.count(), 0);
+      assert(await eyeTrigger.evaluate((button) => button === document.activeElement));
+      const header = page.locator('header');
+      assert.match(await header.locator('.intro').innerText(), /直播回放.*实用工具.*粉丝作品/);
+      assert.equal(
+        await header.getByRole('link', { name: /联系作者.*游戏memory/ }).getAttribute('href'),
+        'https://space.bilibili.com/1302404',
+      );
+      await header.getByRole('button', { name: '关于本站' }).click();
+      const siteDialog = page.getByRole('dialog', { name: '关于本站' });
+      assert(await siteDialog.getByRole('link', { name: 'GitHub 反馈' }).isVisible());
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-      await page.getByRole('link', { name: /返回资源目录/ }).click();
+      await siteDialog.getByRole('button', { name: '关闭关于本站' }).click();
+      assert.equal(await siteDialog.count(), 0);
+      assert.equal(page.url(), homeUrl);
+      await page.goto(new URL('about.html#hinome-eye', url).href);
+      await eyeDialog.waitFor();
+      assert.equal(new URL(page.url()).pathname, new URL(homeUrl).pathname);
+      await page.goto(homeUrl);
 
       assert.equal(await page.locator('h1').innerText(), '火市 技術課');
       assert.equal(

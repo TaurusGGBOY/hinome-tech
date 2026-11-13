@@ -99,7 +99,15 @@ input {
   text-align: center;
   color: var(--muted);
   font-size: 16px;
-  margin: 20px 0 19px;
+  margin: 20px 0 7px;
+}
+.site-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin: 0 0 17px;
+  font-size: 14px;
 }
 .search {
   height: 51px;
@@ -310,28 +318,51 @@ button:focus-visible {
   margin: 4px 0 0 35px;
   font-size: 13px;
 }
-.item-about,
-.intro a,
+.about-trigger,
+.site-links a,
 footer a,
-.about-page a {
+.about-dialog a {
   color: var(--tag);
   text-underline-offset: 0.2em;
 }
-.about-page {
-  max-width: 720px;
-  margin: 0 auto 32px;
+.about-trigger {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-decoration: underline;
+  text-shadow: inherit;
+  cursor: pointer;
+}
+.about-dialog {
+  width: min(680px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
   padding: clamp(18px, 5vw, 32px);
   border: 1px solid #edf3ff49;
   border-radius: 20px;
-  background: #14243cdd;
+  color: var(--text);
+  background: #14243cf5;
   backdrop-filter: blur(8px);
+  overflow-wrap: anywhere;
 }
-.about-page section + section { margin-top: 24px; }
-.about-page h2 { color: var(--section-title); }
-.about-page h3 { color: var(--resource-title); }
-.about-page dl { margin: 0; }
-.about-page dt { font-weight: 650; color: var(--resource-title); }
-.about-page dd { margin: 2px 0 10px; }
+.about-dialog::backdrop { background: #071224a8; }
+.about-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.about-heading h2 { margin: 0; color: var(--section-title); }
+.about-heading button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #edf3ff49;
+  border-radius: 50%;
+  background: #e0edff1c;
+  color: var(--text);
+  cursor: pointer;
+}
+.about-trigger:focus-visible,
+.about-heading button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.about-dialog section + section { margin-top: 24px; }
+.about-dialog h3 { color: var(--resource-title); }
+.about-dialog dl { margin: 0; }
+.about-dialog dt { font-weight: 650; color: var(--resource-title); }
+.about-dialog dd { margin: 2px 0 10px; }
 .tags span + span:before {
   content: '·';
   margin-right: 7px;
@@ -422,7 +453,7 @@ footer {
     height: 38px;
   }
   .intro {
-    margin: 21px 0 15px;
+    margin: 21px 0 7px;
   }
   .search {
     height: 49px;

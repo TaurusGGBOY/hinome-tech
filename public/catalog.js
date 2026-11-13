@@ -59,6 +59,7 @@
     });
     clear?.addEventListener('click', reset);
     document.addEventListener('keydown', (event) => {
+      if (document.querySelector('dialog[open]')) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         input.focus();
