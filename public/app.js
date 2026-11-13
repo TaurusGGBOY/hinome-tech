@@ -16,6 +16,7 @@
         list.className = 'items';
         for (const item of group.items) {
           const li = document.createElement('li');
+          li.className = 'card';
           const link = document.createElement('a');
           link.className = 'item';
           link.href = item.url;
@@ -47,9 +48,17 @@
           arrow.className = 'arrow';
           arrow.setAttribute('aria-hidden', 'true');
           arrow.textContent = '↗';
-          body.append(title, description, tags);
+          body.append(title, description);
           link.append(icon, body, arrow);
           li.append(link);
+          if (item.about) {
+            const about = document.createElement('a');
+            about.className = 'item-about';
+            about.href = item.about;
+            about.textContent = `关于${item.title}`;
+            li.append(about);
+          }
+          li.append(tags);
           list.append(li);
         }
         section.append(h2, list);

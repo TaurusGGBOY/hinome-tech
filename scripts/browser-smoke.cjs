@@ -113,7 +113,7 @@ async function main() {
         true,
       );
       assert.equal(await page.locator('#palette, [data-border-option]').count(), 0);
-      const cardStyle = await page.locator('.item').first().evaluate((card) => ({
+      const cardStyle = await page.locator('.card').first().evaluate((card) => ({
         fill: getComputedStyle(card).backgroundColor,
         edge: getComputedStyle(card, '::before').paddingTop,
         title: getComputedStyle(card.querySelector('.item-title')).color,
@@ -127,6 +127,26 @@ async function main() {
         tag: 'rgb(183, 216, 242)',
         section: 'rgb(255, 172, 156)',
       });
+      const tagGaps = await page.locator('.card').evaluateAll((cards) =>
+        cards.map((card) =>
+          card.getBoundingClientRect().bottom - card.querySelector('.tags').getBoundingClientRect().bottom,
+        ),
+      );
+      assert(tagGaps.every((gap) => Math.abs(gap - 10) < 0.5));
+
+      await page.getByRole('link', { name: '关于火の眼', exact: true }).click();
+      assert.equal(new URL(page.url()).hash, '#hinome-eye');
+      assert(await page.getByRole('heading', { name: '关于火の眼' }).isVisible());
+      assert.equal(
+        await page.getByRole('link', { name: '打开火の眼' }).getAttribute('href'),
+        'https://best-hinome.pages.dev/',
+      );
+      await page.getByRole('link', { name: /返回资源目录/ }).click();
+      await page.locator('header').getByRole('link', { name: '关于本站' }).click();
+      assert(await page.getByRole('heading', { name: '关于本站', level: 1 }).isVisible());
+      assert(await page.getByRole('link', { name: 'GitHub 反馈' }).isVisible());
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.getByRole('link', { name: /返回资源目录/ }).click();
 
       assert.equal(await page.locator('h1').innerText(), '火市 技術課');
       assert.equal(
