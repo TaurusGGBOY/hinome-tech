@@ -148,12 +148,14 @@ async function main() {
       assert.equal(await eyeDialog.count(), 0);
       assert(await eyeTrigger.evaluate((button) => button === document.activeElement));
       const header = page.locator('header');
-      assert.match(await header.locator('.intro').innerText(), /直播回放.*实用工具.*粉丝作品/);
+      assert.doesNotMatch(await header.innerText(), /在这里查找|关于本站|联系作者/);
+      const footer = page.locator('footer');
+      assert.match(await footer.locator('.site-summary').innerText(), /直播回放.*实用工具.*粉丝作品/);
       assert.equal(
-        await header.getByRole('link', { name: /联系作者.*游戏memory/ }).getAttribute('href'),
+        await footer.getByRole('link', { name: /联系作者.*游戏memory/ }).getAttribute('href'),
         'https://space.bilibili.com/1302404',
       );
-      await header.getByRole('button', { name: '关于本站' }).click();
+      await footer.getByRole('button', { name: '关于本站' }).click();
       const siteDialog = page.getByRole('dialog', { name: '关于本站' });
       assert(await siteDialog.getByRole('link', { name: 'GitHub 反馈' }).isVisible());
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
