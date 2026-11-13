@@ -65,11 +65,12 @@ async function main() {
       assert.equal(response.status(), 200);
       const initialCount = await page.locator('.item').count();
       assert(initialCount >= 6);
-      assert.equal(await page.locator('.group').count(), 3);
       assert.deepEqual(await page.locator('.group h2').allTextContents(), [
-        '工具',
-        '百科',
-        '二创',
+        '实用工具',
+        '百科资料',
+        '影像档案',
+        '亲历回顾',
+        '二创作品',
       ]);
       const expectedIcons = {
         火の眼: 'eye',
@@ -185,8 +186,20 @@ async function main() {
       );
       assert.equal(
         await archive.locator('xpath=ancestor::section').locator('h2').innerText(),
-        '工具',
+        '实用工具',
       );
+      const expectedSections = {
+        '影像档案': ['BV1NR4y1o7bK', 'BV1iMnY6BEJb'],
+        '亲历回顾': ['BV15e411V7kT', 'BV1wdpZ6hEQW', 'BV1W2Jv64EuG', 'BV1y5WF6KEuc'],
+      };
+      for (const [sectionTitle, videoIds] of Object.entries(expectedSections)) {
+        await input.fill(sectionTitle);
+        assert.deepEqual(await page.locator('.group h2').allTextContents(), [sectionTitle]);
+        const videoLinks = await page.locator('.item').evaluateAll((items) =>
+          items.map((item) => new URL(item.href).pathname.split('/')[2]),
+        );
+        assert.deepEqual(videoLinks, videoIds, sectionTitle);
+      }
       await input.fill('完全不存在的搜索');
       assert.equal(await page.locator('#empty').isVisible(), true);
       await page.locator('#empty-clear').click();

@@ -1,7 +1,7 @@
 // 资源目录的唯一维护来源。调整分类、文案或链接时只需编辑此文件。
 window.RESOURCE_GROUPS = [
   {
-    title: '工具',
+    title: '实用工具',
     items: [
       {
         title: '火の眼',
@@ -38,7 +38,7 @@ window.RESOURCE_GROUPS = [
     ],
   },
   {
-    title: '百科',
+    title: '百科资料',
     items: [
       {
         title: '火羽ひのめ百科',
@@ -57,6 +57,11 @@ window.RESOURCE_GROUPS = [
         aliases: ['情报屋', 'HY Page'],
         url: 'https://ikaros-521.github.io/HY-Page/',
       },
+    ],
+  },
+  {
+    title: '影像档案',
+    items: [
       {
         title: '绝对不会抛下B站去其他地方的日本vtuber',
         icon: 'original',
@@ -76,7 +81,44 @@ window.RESOURCE_GROUPS = [
     ],
   },
   {
-    title: '二创',
+    title: '亲历回顾',
+    items: [
+      {
+        title: '【火羽ひのめ】我对火羽的所见所闻',
+        icon: 'letter',
+        description: '巨妖影崩从个人视角讲述与火羽有关的见闻。',
+        tags: ['个人见闻'],
+        aliases: ['巨妖影崩'],
+        url: 'https://www.bilibili.com/video/BV15e411V7kT/',
+      },
+      {
+        title: '【魈格Yezpi】火羽老粉的匆匆那年那些事',
+        icon: 'letter',
+        description: '魈格Yezpi回顾作为火羽老观众的经历，由青山雨雀投稿。',
+        tags: ['老粉回忆'],
+        aliases: ['魈格', '青山雨雀'],
+        url: 'https://www.bilibili.com/video/BV1wdpZ6hEQW/',
+      },
+      {
+        title: '老资历深情回忆：那些年与火羽大小姐和各位老资历的峥嵘岁月',
+        icon: 'letter',
+        description: 'ブリュンヒルト回忆火羽和早期观众，由冬来盼春至投稿。',
+        tags: ['老粉回忆'],
+        aliases: ['冬来盼春至', '布伦希尔德'],
+        url: 'https://www.bilibili.com/video/BV1W2Jv64EuG/',
+      },
+      {
+        title: '关于前皮套运营的我被火羽小姐干出走马灯的这件事',
+        icon: 'letter',
+        description: '残障少女德莉珐以曾做过皮套运营的视角谈火羽。',
+        tags: ['运营视角', '个人回顾'],
+        aliases: ['德莉珐', '走马灯'],
+        url: 'https://www.bilibili.com/video/BV1y5WF6KEuc/',
+      },
+    ],
+  },
+  {
+    title: '二创作品',
     items: [
       {
         title: '《信》',
