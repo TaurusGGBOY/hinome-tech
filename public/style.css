@@ -299,12 +299,6 @@ button:focus-visible {
   padding-top: 6px;
   margin-left: 35px;
 }
-.item-about {
-  position: relative;
-  align-self: flex-start;
-  margin: 4px 0 0 35px;
-  font-size: 13px;
-}
 .about-trigger,
 footer a,
 .about-dialog a {

@@ -10,7 +10,6 @@ window.RESOURCE_GROUPS = [
         tags: ['直播数据', '弹幕', 'SC'],
         aliases: ['火之眼', '火眼', 'hinome'],
         url: 'https://best-hinome.pages.dev/',
-        about: 'hinome-eye',
       },
       {
         title: '万舰的风景',

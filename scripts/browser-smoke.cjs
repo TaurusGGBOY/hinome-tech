@@ -135,18 +135,8 @@ async function main() {
       assert(tagGaps.every((gap) => Math.abs(gap - 10) < 0.5));
 
       const homeUrl = page.url();
-      const eyeTrigger = page.getByRole('button', { name: '关于火の眼', exact: true });
-      await eyeTrigger.click();
-      const eyeDialog = page.getByRole('dialog', { name: '关于火の眼' });
-      assert(await eyeDialog.isVisible());
-      assert.equal(page.url(), homeUrl);
-      assert.equal(
-        await page.getByRole('link', { name: '打开火の眼' }).getAttribute('href'),
-        'https://best-hinome.pages.dev/',
-      );
-      await page.keyboard.press('Escape');
-      assert.equal(await eyeDialog.count(), 0);
-      assert(await eyeTrigger.evaluate((button) => button === document.activeElement));
+      assert.equal(await page.getByRole('button', { name: '关于火の眼' }).count(), 0);
+      assert.equal(await page.locator('#hinome-eye').count(), 0);
       const header = page.locator('header');
       assert.doesNotMatch(await header.innerText(), /在这里查找|关于本站|联系作者/);
       const footer = page.locator('footer');
@@ -163,7 +153,7 @@ async function main() {
       assert.equal(await siteDialog.count(), 0);
       assert.equal(page.url(), homeUrl);
       await page.goto(new URL('about.html#hinome-eye', url).href);
-      await eyeDialog.waitFor();
+      await siteDialog.waitFor();
       assert.equal(new URL(page.url()).pathname, new URL(homeUrl).pathname);
       await page.goto(homeUrl);
 

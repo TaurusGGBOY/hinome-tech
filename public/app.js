@@ -51,16 +51,6 @@
           body.append(title, description);
           link.append(icon, body, arrow);
           li.append(link);
-          if (item.about) {
-            const about = document.createElement('button');
-            about.type = 'button';
-            about.className = 'item-about about-trigger';
-            about.dataset.dialog = item.about;
-            about.setAttribute('aria-haspopup', 'dialog');
-            about.setAttribute('aria-controls', item.about);
-            about.textContent = `关于${item.title}`;
-            li.append(about);
-          }
           li.append(tags);
           list.append(li);
         }
