@@ -1,11 +1,20 @@
 (() => {
   const root = document.querySelector('#groups');
+  const catalogSpace = document.querySelector('#catalog-space');
   const status = document.querySelector('#status');
   const empty = document.querySelector('#empty');
   const controls = HinomeCatalog.bindSearch({
     input: document.querySelector('#search'),
     clear: document.querySelector('#clear'),
     onRender(groups, query, count) {
+      if (query && catalogSpace.hidden) {
+        // Keep the unfiltered layout in flow so it can rewrap at the current width.
+        for (const section of root.children) {
+          catalogSpace.append(section.cloneNode(true));
+        }
+      }
+      if (!query) catalogSpace.replaceChildren();
+      catalogSpace.hidden = !query;
       root.replaceChildren();
       for (const group of groups) {
         const section = document.createElement('section');

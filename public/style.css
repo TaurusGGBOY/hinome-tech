@@ -17,6 +17,7 @@
 }
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 body {
   margin: 0;
@@ -166,12 +167,22 @@ kbd {
   padding: 5px;
 }
 #catalog {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   padding: 18px 24px;
   text-shadow:
     0 1px 2px #0a1526,
     0 1px 7px #091425d9;
   border-radius: 20px;
   backdrop-filter: blur(6px) saturate(1.14);
+}
+#catalog > :is(#groups, #catalog-space, #empty) {
+  grid-area: 1 / 1;
+}
+#catalog-space {
+  visibility: hidden;
+  pointer-events: none;
 }
 .group {
   display: grid;

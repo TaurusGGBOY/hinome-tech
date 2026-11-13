@@ -63,9 +63,9 @@ async function main() {
       });
       const response = await page.goto(url, { waitUntil: 'networkidle' });
       assert.equal(response.status(), 200);
-      const initialCount = await page.locator('.item').count();
+      const initialCount = await page.locator('#groups .item').count();
       assert(initialCount >= 6);
-      assert.deepEqual(await page.locator('.group h2').allTextContents(), [
+      assert.deepEqual(await page.locator('#groups .group h2').allTextContents(), [
         '实用工具',
         '百科资料',
         '影像档案',
@@ -166,6 +166,11 @@ async function main() {
         `${name}: horizontal overflow`,
       );
       const input = page.locator('#search');
+      const layout = () => page.evaluate(() => {
+        const { x, y, width, height } = document.querySelector('#catalog').getBoundingClientRect();
+        return { x, y, width, height, footer: document.querySelector('footer').offsetTop };
+      });
+      const fullLayout = await layout();
       await input.fill('舰长');
       assert(await page.getByRole('link', { name: /万舰的风景/ }).isVisible());
       assert.equal(await page.getByRole('link', { name: /火の眼/ }).count(), 0);
@@ -188,25 +193,28 @@ async function main() {
         '亲历回顾': ['BV15e411V7kT', 'BV1wdpZ6hEQW', 'BV1W2Jv64EuG', 'BV1y5WF6KEuc'],
       };
       await input.fill('字幕检索');
+      assert.deepEqual(await layout(), fullLayout);
       const subtitles = page.getByRole('link', { name: /直播回放字幕检索/ });
       assert(await subtitles.isVisible());
       assert.equal(await subtitles.getAttribute('href'), 'https://hinome-subtitles.pages.dev/');
-      assert.deepEqual(await page.locator('.group h2').allTextContents(), ['实用工具']);
+      assert.deepEqual(await page.locator('#groups .group h2').allTextContents(), ['实用工具']);
       for (const [sectionTitle, videoIds] of Object.entries(expectedSections)) {
         await input.fill(sectionTitle);
-        assert.deepEqual(await page.locator('.group h2').allTextContents(), [sectionTitle]);
-        const videoLinks = await page.locator('.item').evaluateAll((items) =>
+        assert.deepEqual(await page.locator('#groups .group h2').allTextContents(), [sectionTitle]);
+        const videoLinks = await page.locator('#groups .item').evaluateAll((items) =>
           items.map((item) => new URL(item.href).pathname.split('/')[2]),
         );
         assert.deepEqual(videoLinks, videoIds, sectionTitle);
       }
       await input.fill('完全不存在的搜索');
       assert.equal(await page.locator('#empty').isVisible(), true);
+      assert.deepEqual(await layout(), fullLayout);
       await page.locator('#empty-clear').click();
-      assert.equal(await page.locator('.item').count(), initialCount);
+      assert.deepEqual(await layout(), fullLayout);
+      assert.equal(await page.locator('#groups .item').count(), initialCount);
       await input.fill('生日');
       await page.locator('#clear').click();
-      assert.equal(await page.locator('.item').count(), initialCount);
+      assert.equal(await page.locator('#groups .item').count(), initialCount);
       await page.locator('body').click({ position: { x: 5, y: 5 } });
       await page.keyboard.press('Control+k');
       assert.equal(
@@ -222,7 +230,7 @@ async function main() {
           new InputEvent('input', { bubbles: true, isComposing: true }),
         );
       });
-      assert.equal(await page.locator('.item').count(), initialCount);
+      assert.equal(await page.locator('#groups .item').count(), initialCount);
       await input.evaluate((el) => {
         el.value = '舰长';
         el.dispatchEvent(
@@ -233,7 +241,7 @@ async function main() {
       assert.equal(await page.getByRole('link', { name: /火の眼/ }).count(), 0);
       await page.locator('#clear').click();
       const links = await page
-        .locator('.item')
+        .locator('#groups .item')
         .evaluateAll((nodes) =>
           nodes.map((a) => ({ href: a.href, target: a.target, rel: a.rel })),
         );
@@ -246,7 +254,7 @@ async function main() {
             a.rel.includes('noopener'),
         ),
       );
-      const first = page.locator('.item').first();
+      const first = page.locator('#groups .item').first();
       const popupPromise = page.waitForEvent('popup');
       await page
         .context()
