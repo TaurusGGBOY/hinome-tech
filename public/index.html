@@ -11,73 +11,10 @@
     <script src="resources.js" defer></script>
     <script src="catalog.js" defer></script>
     <script src="app.js" defer></script>
-    <script src="palette.js" defer></script>
   </head>
   <body>
     <a class="skip" href="#catalog">跳至资源目录</a>
     <div class="page">
-      <details class="palette" id="palette">
-        <summary class="glass-control" data-glass>调色盘</summary>
-        <div class="palette-controls">
-          <label class="palette-row" for="panel-color"
-            >面板颜色
-            <input type="color" id="panel-color" value="#30465e" />
-          </label>
-          <div class="swatches" role="group" aria-label="面板预设颜色">
-            <button
-              type="button"
-              data-color="#30465e"
-              style="--swatch: #30465e"
-              aria-label="湖蓝灰"
-              title="湖蓝灰"
-            ></button>
-            <button
-              type="button"
-              data-color="#3d5050"
-              style="--swatch: #3d5050"
-              aria-label="松烟青"
-              title="松烟青"
-            ></button>
-            <button
-              type="button"
-              data-color="#62505f"
-              style="--swatch: #62505f"
-              aria-label="暮紫"
-              title="暮紫"
-            ></button>
-            <button
-              type="button"
-              data-color="#6a454a"
-              style="--swatch: #6a454a"
-              aria-label="枫叶红"
-              title="枫叶红"
-            ></button>
-          </div>
-          <label class="palette-row" for="title-color"
-            >标题颜色
-            <input type="color" id="title-color" value="#ffad78" />
-          </label>
-          <label class="palette-row" for="transparency"
-            >面板透明度
-            <output id="transparency-value" for="transparency">100%</output>
-          </label>
-          <input type="range" id="transparency" min="0" max="100" value="100" />
-          <label class="palette-row" for="scene-transparency"
-            >背景透明度
-            <output id="scene-transparency-value" for="scene-transparency"
-              >0%</output
-            >
-          </label>
-          <input
-            type="range"
-            id="scene-transparency"
-            min="0"
-            max="100"
-            value="0"
-          />
-          <button type="button" id="reset-palette">恢复默认</button>
-        </div>
-      </details>
       <header class="header">
         <div class="brand">
           <img
@@ -94,7 +31,7 @@
         </div>
         <p class="intro">火羽相关资源导航</p>
         <label class="sr-only" for="search">搜索资源</label>
-        <div class="search glass-control" data-glass>
+        <div class="search">
           <span class="search-mark" aria-hidden="true"></span
           ><input
             id="search"

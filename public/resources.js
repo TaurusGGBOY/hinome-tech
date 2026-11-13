@@ -35,6 +35,14 @@ window.RESOURCE_GROUPS = [
         aliases: ['千舰回放', '千舰纪念', 'renode-editor'],
         url: 'https://hinome.renode-editor.com/',
       },
+      {
+        title: '火羽ひのめ · 直播回放字幕检索',
+        icon: 'replay',
+        description: '按直播场次浏览字幕，搜索日文原文或中文翻译。',
+        tags: ['字幕检索', '双语字幕', '直播回放'],
+        aliases: ['hinome-subtitles', '中日字幕'],
+        url: 'https://hinome-subtitles.pages.dev/',
+      },
     ],
   },
   {

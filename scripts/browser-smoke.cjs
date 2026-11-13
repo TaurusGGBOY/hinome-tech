@@ -77,6 +77,7 @@ async function main() {
         万舰的风景: 'voyage',
         火羽舰队: 'fleet',
         '千舰史料 · 直播回放检索': 'replay',
+        '火羽ひのめ · 直播回放字幕检索': 'replay',
         火羽ひのめ百科: 'encyclopedia',
         '火羽ひのめ 情报屋': 'profile',
         绝对不会抛下B站去其他地方的日本vtuber: 'original',
@@ -111,56 +112,21 @@ async function main() {
           .evaluate((el) => el.complete && el.naturalWidth > 0),
         true,
       );
-      await page.locator('#palette summary').click();
-      assert.equal(await page.locator('#transparency').inputValue(), '100');
-      assert.equal(
-        await page.locator('#transparency-value').textContent(),
-        '100%',
-      );
-      await page.locator('#panel-color').fill('#6a454a');
-      assert.equal(
-        await page.evaluate(() =>
-          document.documentElement.style.getPropertyValue('--panel-color'),
-        ),
-        '#6a454a',
-      );
-      await page.locator('#title-color').fill('#abcdef');
-      assert.equal(
-        await page.evaluate(() =>
-          document.documentElement.style.getPropertyValue('--title-color'),
-        ),
-        '#abcdef',
-      );
-      await page.locator('#transparency').fill('35');
-      assert.equal(
-        await page.locator('#transparency-value').textContent(),
-        '35%',
-      );
-      assert.equal(
-        await page.evaluate(() =>
-          document.documentElement.style.getPropertyValue('--panel-opacity'),
-        ),
-        '65%',
-      );
-      await page.locator('#scene-transparency').fill('25');
-      assert.equal(
-        await page.evaluate(() =>
-          document.documentElement.style.getPropertyValue('--scene-opacity'),
-        ),
-        '0.75',
-      );
-      await page.locator('#reset-palette').click();
-      assert.equal(await page.locator('#transparency').inputValue(), '100');
-      assert.equal(await page.locator('#scene-transparency').inputValue(), '0');
-      assert.equal(await page.locator('#panel-color').inputValue(), '#30465e');
-      assert.equal(await page.locator('#title-color').inputValue(), '#ffad78');
-      assert.equal(
-        await page.evaluate(() =>
-          document.documentElement.style.getPropertyValue('--panel-opacity'),
-        ),
-        '0%',
-      );
-      await page.locator('#palette summary').click();
+      assert.equal(await page.locator('#palette, [data-border-option]').count(), 0);
+      const cardStyle = await page.locator('.item').first().evaluate((card) => ({
+        fill: getComputedStyle(card).backgroundColor,
+        edge: getComputedStyle(card, '::before').paddingTop,
+        title: getComputedStyle(card.querySelector('.item-title')).color,
+        tag: getComputedStyle(card.querySelector('.tags')).color,
+        section: getComputedStyle(card.closest('.group').querySelector('h2')).color,
+      }));
+      assert.deepEqual(cardStyle, {
+        fill: 'rgba(0, 0, 0, 0)',
+        edge: '1.5px',
+        title: 'rgb(255, 212, 166)',
+        tag: 'rgb(183, 216, 242)',
+        section: 'rgb(255, 172, 156)',
+      });
 
       assert.equal(await page.locator('h1').innerText(), '火市 技術課');
       assert.equal(
@@ -192,6 +158,11 @@ async function main() {
         '影像档案': ['BV1NR4y1o7bK', 'BV1iMnY6BEJb'],
         '亲历回顾': ['BV15e411V7kT', 'BV1wdpZ6hEQW', 'BV1W2Jv64EuG', 'BV1y5WF6KEuc'],
       };
+      await input.fill('字幕检索');
+      const subtitles = page.getByRole('link', { name: /直播回放字幕检索/ });
+      assert(await subtitles.isVisible());
+      assert.equal(await subtitles.getAttribute('href'), 'https://hinome-subtitles.pages.dev/');
+      assert.deepEqual(await page.locator('.group h2').allTextContents(), ['实用工具']);
       for (const [sectionTitle, videoIds] of Object.entries(expectedSections)) {
         await input.fill(sectionTitle);
         assert.deepEqual(await page.locator('.group h2').allTextContents(), [sectionTitle]);
@@ -266,7 +237,7 @@ async function main() {
         });
       }
       console.log(
-        `${name}: initial, order, icons, palette, search, aliases, empty, clear, shortcut, IME, external link, overflow and console passed`,
+        `${name}: initial, order, icons, glass cards, search, aliases, empty, clear, shortcut, IME, external link, overflow and console passed`,
       );
       await page.close();
     }
