@@ -55,18 +55,21 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          HTTPS_PROXY: http://127.0.0.1:7890
-          HTTP_PROXY: http://127.0.0.1:7890
+        shell: bash
         run: |
+          if (echo >/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
+            export HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 CHROME_PROXY=http://127.0.0.1:7890
+          fi
           npx --yes wrangler@4.152.0 pages deploy public \
             --project-name hinome-tech --branch main --commit-hash "$GITHUB_SHA"
 
       - name: Verify the published site
         if: inputs.release_tag != ''
-        env:
-          HTTPS_PROXY: http://127.0.0.1:7890
-          CHROME_PROXY: http://127.0.0.1:7890
+        shell: bash
         run: |
+          if (echo >/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
+            export HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 CHROME_PROXY=http://127.0.0.1:7890
+          fi
           while IFS= read -r -d '' file; do
             relative_path="${file#public/}"
             if [[ "$relative_path" == index.html ]]; then
