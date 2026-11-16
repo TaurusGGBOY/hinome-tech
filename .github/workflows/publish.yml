@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Use Node.js from the Aliyun runner
+      - name: Use preinstalled CI tools
         run: echo "/opt/hinome-ci-tools/bin" >> "$GITHUB_PATH"
 
       - name: Verify candidate in the browser

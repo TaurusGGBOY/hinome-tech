@@ -26,7 +26,7 @@ npm run test:browser
 
 ## 发布
 
-GitHub Actions 只在此仓库的 `main` 手动运行，使用上海阿里云专属 runner。Cloudflare Pages 项目为 `hinome-tech`，上传使用仓库 Actions Secrets 里的 Cloudflare Pages 编辑令牌和账号 ID。
+GitHub Actions 只在此仓库的 `main` 手动运行，使用 GCP Cloud Run 按需弹性 runner（`hinome-tech-cloud`，`us-west1` 4 vCPU / 8 GiB）。Cloudflare Pages 项目为 `hinome-tech`，上传使用仓库 Actions Secrets 里的 Cloudflare Pages 编辑令牌和账号 ID。
 
 单独验证候选可以在 `main` 运行工作流，不传发布标签。
 
@@ -40,4 +40,4 @@ gh workflow run publish.yml --ref main
 gh workflow run publish.yml --ref main -f release_tag=v0.2.0
 ```
 
-工作流在阿里云完成候选浏览器测试、Cloudflare 上传、公网文件比对及桌面和手机测试。公网验收通过后晋升正式 Release。
+工作流在云端弹性 runner 完成候选浏览器测试、Cloudflare 上传、公网文件比对及桌面和手机测试。公网验收通过后晋升正式 Release。
