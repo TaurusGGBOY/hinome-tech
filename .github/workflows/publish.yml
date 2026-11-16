@@ -84,3 +84,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$RELEASE_TAG" --prerelease=false --latest
+
+      - name: Clean workspace dependencies and expired caches
+        if: always()
+        continue-on-error: true
+        run: |
+          rm -rf node_modules
+          rm -rf "${HOME}/.config/google-chrome/Default/Cache" "${HOME}/.cache/google-chrome" 2>/dev/null || true
+          for d in "${HOME}/.npm/_cacache" "${HOME}/.npm/_npx"; do
+            [ -d "$d" ] && find "$d" -type f -mtime +7 -delete || true
+          done
+          [ -d "${HOME}/.npm" ] && find "${HOME}/.npm" -type d -empty -delete 2>/dev/null || true
