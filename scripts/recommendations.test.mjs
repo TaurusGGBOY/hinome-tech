@@ -307,12 +307,11 @@ test('an empty opinion cannot stand in for this instance’s genuine owner decis
   assert.deepEqual(approvalDecision({ ...decision, status: 'PENDING', timeline: [] }, owner, instance), { status: 'pending' });
 });
 
-function encryptedCallback(payload, config, at = testTime) {
+function encryptedCallback(payload, config, timestamp = String(Math.floor(testTime / 1000))) {
   const iv = randomBytes(16);
   const cipher = createCipheriv('aes-256-cbc', createHash('sha256').update(config.encryptKey).digest(), iv);
   const encrypted = Buffer.concat([iv, cipher.update(JSON.stringify(payload)), cipher.final()]);
   const body = Buffer.from(JSON.stringify({ encrypt: encrypted.toString('base64') }));
-  const timestamp = String(Math.floor(at / 1000));
   const nonce = 'signed_nonce';
   const headers = {
     'x-lark-request-timestamp': timestamp,
@@ -345,6 +344,12 @@ test('Feishu callbacks require a fresh platform signature and the configured rev
   assert.equal(cardCallback(body, headers, { ...config, owner: 'ou_someone_else' }, testTime), null);
   assert.equal(cardCallback(Buffer.concat([body, Buffer.from(' ')]), headers, config, testTime), null);
   assert.equal(cardCallback(body, headers, config, testTime + 301_000), null);
+  const created = String(BigInt(testTime) * 1000n);
+  for (const timestamp of [created, 'opaque-time-format']) {
+    const signed = encryptedCallback({ ...payload, header: { ...payload.header, create_time: created } }, config, timestamp);
+    assert.equal(cardCallback(signed.body, signed.headers, config, testTime)?.intent, 'submit_opinion');
+    assert.equal(cardCallback(signed.body, signed.headers, config, testTime + 301_000), null);
+  }
 
   const handshake = encryptedCallback({ type: 'url_verification', token: config.verificationToken, challenge: 'verify' }, config);
   const challenge = cardCallback(handshake.body, {}, config, testTime);

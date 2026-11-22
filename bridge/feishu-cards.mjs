@@ -3,7 +3,7 @@ import { createDecipheriv, createHash, timingSafeEqual } from 'node:crypto';
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 const message = /^om_[A-Za-z0-9_-]{4,120}$/;
 const event = /^[\da-z_-]{8,128}$/i;
-const fiveMinutes = 300;
+const fiveMinutes = 300_000;
 const actions = new Set(['approve', 'open_opinion', 'open_reject', 'back', 'submit_opinion', 'submit_reject']);
 const plain = (content) => ({ tag: 'plain_text', content });
 
@@ -26,7 +26,16 @@ function decodeEnvelope(envelope, key) {
   return JSON.parse(plaintext.toString('utf8'));
 }
 
-export function cardCallback(raw, headers, config, now = Date.now()) {
+function timestampMillis(value) {
+  if (typeof value !== 'string' || !/^\d{10}(?:\d{3}){0,3}$/.test(value)) return null;
+  return value.length === 10 ? Number(value) * 1000 : Number(value.slice(0, 13));
+}
+
+export function cardCallback(raw, headers, config, now = Date.now(), onReject = () => {}) {
+  function reject(reason) {
+    onReject(reason);
+    return null;
+  }
   if (!config.encryptKey || !config.verificationToken) return null;
   try {
     const envelope = JSON.parse(raw.toString('utf8'));
@@ -36,16 +45,15 @@ export function cardCallback(raw, headers, config, now = Date.now()) {
       const payload = decodeEnvelope(envelope, config.encryptKey);
       return payload.type === 'url_verification' && sameValue(payload.token, config.verificationToken) &&
         typeof payload.challenge === 'string' && payload.challenge.length <= 256
-        ? { challenge: payload.challenge } : null;
+        ? { challenge: payload.challenge } : reject('missing_signature');
     }
     const timestamp = headers['x-lark-request-timestamp'];
     const nonce = headers['x-lark-request-nonce'];
-    if (typeof timestamp !== 'string' || !/^(\d{10}|\d{13})$/.test(timestamp) ||
-        typeof nonce !== 'string' || !/^[\w.-]{1,128}$/.test(nonce) ||
-        Math.abs(now / 1000 - Number(timestamp) / (timestamp.length === 13 ? 1000 : 1)) > fiveMinutes ||
-        !/^[0-9a-f]{64}$/i.test(signature)) return null;
+    if (typeof timestamp !== 'string' || !timestamp.length || timestamp.length > 64) return reject('timestamp_header');
+    if (typeof nonce !== 'string' || !/^[\w.-]{1,128}$/.test(nonce)) return reject('nonce_format');
+    if (!/^[0-9a-f]{64}$/i.test(signature)) return reject('signature_format');
     const expected = createHash('sha256').update(timestamp + nonce + config.encryptKey).update(raw).digest('hex');
-    if (!sameValue(signature.toLowerCase(), expected)) return null;
+    if (!sameValue(signature.toLowerCase(), expected)) return reject('signature_mismatch');
 
     const payload = decodeEnvelope(envelope, config.encryptKey);
     if (payload.type === 'url_verification' && sameValue(payload.token, config.verificationToken) &&
@@ -56,11 +64,18 @@ export function cardCallback(raw, headers, config, now = Date.now()) {
     const value = payload.event?.action?.value;
     const operator = payload.event?.operator?.open_id;
     const messageId = payload.event?.context?.open_message_id;
-    if (payload.schema !== '2.0' || header?.event_type !== 'card.action.trigger' ||
-        header.app_id !== config.appId || !sameValue(header.token, config.verificationToken) ||
-        !config.owner || operator !== config.owner || typeof header.event_id !== 'string' || !event.test(header.event_id) || !message.test(messageId) ||
-        value?.kind !== 'hinome-tech-review' || !uuid.test(value.id) || !uuid.test(value.key) ||
-        !actions.has(value.intent) || !Number.isSafeInteger(value.rev) || value.rev < 0) return null;
+    if (payload.schema !== '2.0' || header?.event_type !== 'card.action.trigger') return reject('event_type');
+    if (header.app_id !== config.appId) return reject('app_mismatch');
+    if (!sameValue(header.token, config.verificationToken)) return reject('token_mismatch');
+    // The signature covers both fields. Feishu's card creation time is in microseconds.
+    const created = timestampMillis(header.create_time) ?? timestampMillis(timestamp);
+    if (created === null) return reject('timestamp_format');
+    if (Math.abs(now - created) > fiveMinutes) return reject('timestamp_stale');
+    if (!config.owner || operator !== config.owner) return reject('reviewer_mismatch');
+    if (typeof header.event_id !== 'string' || !event.test(header.event_id)) return reject('event_id_format');
+    if (!message.test(messageId)) return reject('message_id_format');
+    if (value?.kind !== 'hinome-tech-review' || !uuid.test(value.id) || !uuid.test(value.key) ||
+        !actions.has(value.intent) || !Number.isSafeInteger(value.rev) || value.rev < 0) return reject('action_format');
 
     let opinion;
     if (value.intent === 'submit_opinion' || value.intent === 'submit_reject') {
@@ -71,7 +86,7 @@ export function cardCallback(raw, headers, config, now = Date.now()) {
     return { id: value.id, key: value.key, rev: value.rev, intent: value.intent, messageId,
       eventId: header.event_id, actor: operator, opinion };
   } catch {
-    return null;
+    return reject('invalid_body');
   }
 }
 

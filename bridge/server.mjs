@@ -183,7 +183,7 @@ async function receiveCard(request, response) {
     verificationToken: FEISHU_CALLBACK_VERIFICATION_TOKEN,
     appId: FEISHU_APP_ID,
     owner: FEISHU_OWNER_OPEN_ID,
-  });
+  }, Date.now(), (reason) => console.warn('Feishu card callback rejected:', reason));
   if (!action) return reply(response, 403, { error: 'Invalid callback' });
   try {
     return reply(response, 200, await handleCardAction(action, dispatchCardAction));
