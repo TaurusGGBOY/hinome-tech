@@ -487,7 +487,19 @@ footer {
   }
 }
 
-.footer-links { display: flex; align-items: center; justify-content: center; gap: .35em; white-space: nowrap; }
+.footer-links, .footer-core, .footer-extra {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35em;
+  white-space: nowrap;
+}
+.footer-links { flex-wrap: wrap; }
+.footer-extra::before { content: '·' / ''; }
+@media (max-width: 384px) {
+  .footer-extra { flex-basis: 100%; }
+  .footer-extra::before { content: none; }
+}
 .footer-links .about-trigger { font: inherit; }
 .recommend-dialog [hidden] { display: none; }
 .recommend-dialog fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }

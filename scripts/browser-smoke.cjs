@@ -55,6 +55,7 @@ async function main() {
     for (const [name, viewport] of Object.entries({
       desktop: { width: 1440, height: 900 },
       mobile: { width: 390, height: 844 },
+      compactMobile: { width: 320, height: 740 },
     })) {
       const page = await browser.newPage({ viewport });
       const errors = [];
@@ -181,7 +182,7 @@ async function main() {
         });
       });
       const entry = footer.getByRole('button', { name: '提交推荐' });
-      const footerRows = await footer.locator('.footer-links').evaluate((line) =>
+      const footerRows = await footer.locator(viewport.width <= 384 ? '.footer-core' : '.footer-links').evaluate((line) =>
         Array.from(line.querySelectorAll('a,button'), (item) => {
           const { top, height } = item.getBoundingClientRect();
           return top + height / 2;
