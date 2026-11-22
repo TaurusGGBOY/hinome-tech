@@ -99,6 +99,7 @@ test('real decision field flows separately into an allowlisted edit and awaits v
   t.mock.method(globalThis, 'fetch', async (input, options) => {
     const url = new URL(input);
     if (url.href === env.FEISHU_BRIDGE_URL + '/approvals') {
+      assert.equal(options.redirect, 'manual');
       assert.equal(JSON.parse(options.body).description, proposed.description);
       assert.equal(Object.hasOwn(JSON.parse(options.body), 'ip_key'), false);
       return Response.json({ instance: '096ba37a-0936-4c6a-8213-5b1d4e9b8001' });

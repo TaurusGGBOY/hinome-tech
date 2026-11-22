@@ -32,14 +32,20 @@ async function postpone(db, row, code) {
 }
 
 async function feishu(env, endpoint, body) {
-  const response = await fetch(new URL(endpoint, env.FEISHU_BRIDGE_URL), {
-    method: body ? 'POST' : 'GET',
-    headers: { Authorization: 'Bearer ' + env.FEISHU_BRIDGE_TOKEN, 'Content-Type': 'application/json' },
-    body: body && JSON.stringify(body),
-    redirect: 'error',
-    signal: AbortSignal.timeout(24_000),
-  });
-  if (!response.ok) throw new Error('feishu_unavailable');
+  let response;
+  try {
+    response = await fetch(new URL(endpoint, env.FEISHU_BRIDGE_URL), {
+      method: body ? 'POST' : 'GET',
+      headers: { Authorization: 'Bearer ' + env.FEISHU_BRIDGE_TOKEN, 'Content-Type': 'application/json' },
+      body: body && JSON.stringify(body),
+      // Workers returns redirects in manual mode, so no credentials follow them.
+      redirect: 'manual',
+      signal: AbortSignal.timeout(24_000),
+    });
+  } catch (error) {
+    throw new Error(error.name === 'TimeoutError' ? 'feishu_timeout' : 'feishu_network');
+  }
+  if (!response.ok) throw new Error('feishu_http_' + response.status);
   return response.json();
 }
 
@@ -73,6 +79,7 @@ export async function checkPublication(env, row) {
   url.searchParams.set('check', crypto.randomUUID());
   const response = await fetch(url, {
     headers: { 'Cache-Control': 'no-cache' },
+    redirect: 'manual',
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) return false;
@@ -124,8 +131,10 @@ export async function runJobs(env) {
       await Promise.all(rows.slice(index, index + 3).map(async (row) => {
         try {
           await processSubmission(env, row);
-        } catch {
-          await postpone(db, row, `retry_${state}`);
+        } catch (error) {
+          const key = /^(?:feishu_(?:timeout|network|http_[1-5][0-9]{2})|approval_instance_missing|approval_decision_unavailable)$/.test(error.message)
+            ? error.message : 'processing';
+          await postpone(db, row, `retry_${state}:${key}`);
         }
       }));
     }
