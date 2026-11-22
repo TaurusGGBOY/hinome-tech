@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import test from 'node:test';
 import worker from '../worker/index.mjs';
 import { generateEntry, runJobs } from '../worker/jobs.mjs';
 import { approvalDecision, approvalForm, startApproval, definition } from '../bridge/server.mjs';
+import { cardCallback, handleCardAction, reviewCard, sendReviewCard } from '../bridge/feishu-cards.mjs';
 
 const origin = 'https://hinome-tech.pages.dev';
 const testTime = 1_800_000_000_000;
 const owner = 'ou_test_owner';
-const migration = ['0001_recommendations.sql', '0002_published_updates.sql']
+const migration = ['0001_recommendations.sql', '0002_published_updates.sql', '0003_review_cards.sql']
   .map((name) => fs.readFileSync(new URL('../worker/migrations/' + name, import.meta.url), 'utf8')).join('\n');
 const proposed = {
   title: '待审核素材',
@@ -47,6 +49,7 @@ function fixture() {
         'CF-Connecting-IP': options.ip ?? '192.0.2.1',
         'Content-Type': 'application/json',
         ...(options.internal ? { Authorization: 'Bearer ' + env.PUBLISH_TOKEN } : {}),
+        ...(options.bridge ? { Authorization: 'Bearer ' + env.FEISHU_BRIDGE_TOKEN } : {}),
       },
       body: body && JSON.stringify(body),
     }), env);
@@ -302,4 +305,166 @@ test('an empty opinion cannot stand in for this instance’s genuine owner decis
     assert.throws(() => approvalDecision({ ...decision, ...mismatch }, owner, instance), /approval identity|human decision/);
   }
   assert.deepEqual(approvalDecision({ ...decision, status: 'PENDING', timeline: [] }, owner, instance), { status: 'pending' });
+});
+
+function encryptedCallback(payload, config, at = testTime) {
+  const iv = randomBytes(16);
+  const cipher = createCipheriv('aes-256-cbc', createHash('sha256').update(config.encryptKey).digest(), iv);
+  const encrypted = Buffer.concat([iv, cipher.update(JSON.stringify(payload)), cipher.final()]);
+  const body = Buffer.from(JSON.stringify({ encrypt: encrypted.toString('base64') }));
+  const timestamp = String(Math.floor(at / 1000));
+  const nonce = 'signed_nonce';
+  const headers = {
+    'x-lark-request-timestamp': timestamp,
+    'x-lark-request-nonce': nonce,
+    'x-lark-signature': createHash('sha256').update(timestamp + nonce + config.encryptKey).update(body).digest('hex'),
+  };
+  return { body, headers };
+}
+
+test('Feishu callbacks require a fresh platform signature and the configured reviewer', async () => {
+  const config = { encryptKey: 'fixture-encryption-key', verificationToken: 'fixture-token', appId: 'cli_test', owner };
+  const id = crypto.randomUUID();
+  const key = crypto.randomUUID();
+  const payload = {
+    schema: '2.0',
+    header: { event_id: 'fixture-event-01', event_type: 'card.action.trigger', app_id: config.appId, token: config.verificationToken },
+    event: {
+      operator: { open_id: owner }, context: { open_message_id: 'om_fixture_message' },
+      action: { value: { kind: 'hinome-tech-review', id, key, rev: 1, intent: 'submit_opinion' },
+        form_value: { opinion: ' 原样保留\n' } },
+    },
+  };
+  const { body, headers } = encryptedCallback(payload, config);
+  assert.deepEqual(cardCallback(body, headers, config, testTime), {
+    id, key, actor: owner, intent: 'submit_opinion', messageId: 'om_fixture_message', rev: 1,
+    opinion: ' 原样保留\n', eventId: 'fixture-event-01',
+  });
+  assert.equal(cardCallback(body, {}, config, testTime), null);
+  assert.equal(cardCallback(body, headers, { ...config, appId: 'cli_other' }, testTime), null);
+  assert.equal(cardCallback(body, headers, { ...config, owner: 'ou_someone_else' }, testTime), null);
+  assert.equal(cardCallback(Buffer.concat([body, Buffer.from(' ')]), headers, config, testTime), null);
+  assert.equal(cardCallback(body, headers, config, testTime + 301_000), null);
+
+  const handshake = encryptedCallback({ type: 'url_verification', token: config.verificationToken, challenge: 'verify' }, config);
+  const challenge = cardCallback(handshake.body, {}, config, testTime);
+  assert.deepEqual(await handleCardAction(challenge, async () => assert.fail('URL challenge must not approve')),
+    { challenge: 'verify' });
+  assert.equal(cardCallback(handshake.body, {}, { ...config, verificationToken: 'wrong' }, testTime), null);
+});
+
+test('the same review card has exactly three named actions and the opinion form needs confirmation', async () => {
+  const row = { ...proposed, id: crypto.randomUUID(), key: crypto.randomUUID(), rev: 0, test: true };
+  const main = reviewCard({ ...row, view: 'main' });
+  assert.deepEqual(main.body.elements.filter(({ tag }) => tag === 'button').map(({ text }) => text.content),
+    ['同意', '同意并写意见', '拒绝']);
+  assert.equal(main.body.elements.filter(({ tag }) => tag === 'form').length, 0);
+  const opinion = reviewCard({ ...row, view: 'opinion', rev: 1 });
+  const input = opinion.body.elements.find(({ tag }) => tag === 'form').elements;
+  assert.equal(input[0].name, 'opinion');
+  assert.equal(input[0].required, true);
+  assert.equal(input[1].form_action_type, 'submit');
+  assert.equal(input[1].behaviors[0].value.intent, 'submit_opinion');
+
+  let sends = 0;
+  assert.deepEqual(await sendReviewCard(async (path, data) => {
+    sends++;
+    assert.equal(path, '/im/v1/messages?receive_id_type=open_id');
+    assert.equal(data.receive_id, owner);
+    assert.equal(data.uuid, row.key);
+    assert.deepEqual(JSON.parse(data.content), main);
+    return { message_id: 'om_fixture_message' };
+  }, owner, row), { messageId: 'om_fixture_message' });
+  assert.equal(sends, 1);
+});
+
+test('card-backed submissions issue no native task, and signed actions are uniquely applied', async (t) => {
+  const { sql, env, request } = fixture();
+  env.APPROVAL_MODE = 'card';
+  env.AI = { run: async () => ({ response: modelFields }) };
+  let now = testTime;
+  t.mock.method(Date, 'now', () => now);
+  let cardsSent = 0;
+  const deliveries = new Map();
+  const messageId = (n) => 'om_fixture_' + n;
+  t.mock.method(globalThis, 'fetch', async (input, options) => {
+    assert.equal(new URL(input).pathname, '/cards');
+    const delivery = JSON.parse(options.body);
+    cardsSent++;
+    deliveries.set(delivery.id, delivery.key);
+    return Response.json({ messageId: messageId(cardsSent) });
+  });
+  for (const url of ['https://example.org/card-one', 'https://example.org/card-two', 'https://example.org/card-three']) {
+    assert.equal((await request('/submit', { ...proposed, url })).status, 202);
+  }
+  await runJobs(env);
+  await runJobs(env);
+  assert.equal(cardsSent, 3);
+  const rows = sql.prepare('SELECT id, approval_id, card_message_id FROM submissions ORDER BY rowid').all();
+  assert(rows.every((row) => row.approval_id === null && row.card_message_id));
+  const load = (id) => sql.prepare('SELECT state,card_view,card_rev,opinion,card_decision,card_event_id FROM submissions WHERE id=?').get(id);
+  function action(row, intent, rev, extra = {}, options = { bridge: true }) {
+    return request('/internal/card-action', {
+      id: row.id, key: deliveries.get(row.id), messageId: row.card_message_id, actor: owner,
+      eventId: 'fixture-event-' + rev, intent, rev, ...extra,
+    }, options);
+  }
+  const [first, second, third] = rows;
+  assert.equal((await action(first, 'approve', 0, {}, { internal: true })).status, 401);
+  assert.equal((await action(first, 'approve', 0, { messageId: 'om_unrelated' })).body.outcome, 'missing');
+  assert.equal((await action(first, 'approve', 0)).body.outcome, 'approved');
+  const saved = load(first.id);
+  assert.equal(saved.opinion, '');
+  assert.equal(saved.card_event_id, 'fixture-event-0');
+  await action(first, 'approve', 0, { eventId: 'another-click-id' });
+  assert.deepEqual(load(first.id), saved);
+
+  assert.equal((await action(second, 'submit_opinion', 0, { opinion: '未进入编辑' })).body.outcome, 'stale');
+  assert.equal((await action(second, 'open_opinion', 0)).body.outcome, 'opened');
+  assert.equal(load(second.id).state, 'review');
+  assert.equal(load(second.id).card_view, 'opinion');
+  assert.equal(load(second.id).opinion, null);
+  assert.equal((await action(second, 'approve', 0)).body.outcome, 'stale');
+  assert.equal((await action(second, 'submit_opinion', 1, { opinion: '  ' })).body.outcome, 'invalid_opinion');
+  assert.equal((await action(second, 'submit_opinion', 1, { opinion: ' 原文\n' })).body.outcome, 'approved');
+  assert.equal(load(second.id).opinion, ' 原文\n');
+
+  assert.equal((await action(third, 'open_reject', 0)).body.outcome, 'opened');
+  assert.equal(load(third.id).state, 'review');
+  assert.equal((await action(third, 'submit_reject', 1, { opinion: '后台理由。' })).body.outcome, 'rejected');
+  assert.equal(load(third.id).state, 'rejected');
+  assert.deepEqual((await request('/updates')).body, { updates: [], next: null });
+  now += 14 * 24 * 60 * 60 * 1000;
+  assert.equal((await action(third, 'submit_reject', 1)).body.outcome, 'expired');
+  await runJobs(env);
+  assert.deepEqual(rows.map(({ id }) => load(id).state), ['publish', 'publish', 'rejected']);
+});
+
+test('a lost card delivery acknowledgement can recover from the signed click without resending', async (t) => {
+  const { sql, env, request } = fixture();
+  env.APPROVAL_MODE = 'card';
+  env.AI = { run: async () => ({ response: modelFields }) };
+  let delivery;
+  let sends = 0;
+  t.mock.method(globalThis, 'fetch', async (input, options) => {
+    assert.equal(new URL(input).pathname, '/cards');
+    sends++;
+    delivery = JSON.parse(options.body);
+    return Response.json({}, { status: 503 });
+  });
+  assert.equal((await request('/submit', proposed)).status, 202);
+  await runJobs(env);
+  const load = () => sql.prepare('SELECT state,card_message_id,approval_id,last_error FROM submissions').get();
+  assert.equal(load().state, 'submitted');
+  assert.equal(load().last_error, 'retry_submitted:feishu_http_503');
+  const answer = await request('/internal/card-action', {
+    id: delivery.id, key: delivery.key, rev: 0, intent: 'approve', eventId: 'delivered-event',
+    actor: owner, messageId: 'om_delivered_without_ack',
+  }, { bridge: true });
+  assert.equal(answer.body.outcome, 'approved');
+  await runJobs(env);
+  assert.deepEqual({ ...load() }, {
+    state: 'publish', card_message_id: 'om_delivered_without_ack', approval_id: null, last_error: null,
+  });
+  assert.equal(sends, 1);
 });

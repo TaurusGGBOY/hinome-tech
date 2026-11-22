@@ -1,5 +1,6 @@
 import { editedFields, linkKey, receiptPattern, submission } from './fields.mjs';
 import { checkPublication, runJobs } from './jobs.mjs';
+import { applyCardAction } from './card-review.mjs';
 import { digest, equal, query } from './security.mjs';
 
 const minute = 60_000;
@@ -54,14 +55,15 @@ async function submit(env, body, ip, test = false) {
   const now = Date.now();
   const id = crypto.randomUUID();
   const key = linkKey(data.url);
+  const channel = env.APPROVAL_MODE === 'card' ? 'card' : 'native';
   if (builtInLinks.has(key)) return error(409, '此资源链接已在目录中。');
   const network = await digest(env.PRIVATE_KEY, 'network:' + ip);
   try {
     await query(db, `INSERT INTO submissions
-      (id, link_key, url, title, section, description, tags, ip_key, created, updated, next_at, test)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, link_key, url, title, section, description, tags, ip_key, created, updated, next_at, test, review_channel)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, key, data.url, data.title, data.section, data.description, JSON.stringify(data.tags),
-    network, now, now, now, Number(test)).run();
+    network, now, now, now, Number(test), channel).run();
   } catch (err) {
     if (/admission_limit|recipient_limit|backlog_limit/.test(err.message)) {
       return error(429, '近期投稿较多，请稍后再试。');
@@ -137,6 +139,12 @@ async function publishedUpdates(db, request) {
 
 async function handle(request, env) {
   const path = new URL(request.url).pathname;
+  if (path === '/internal/card-action' && request.method === 'POST') {
+    if (!equal(request.headers.get('Authorization'), env.FEISHU_BRIDGE_TOKEN && 'Bearer ' + env.FEISHU_BRIDGE_TOKEN)) {
+      return error(401, 'Unauthorized');
+    }
+    return [200, await applyCardAction(env.DB, await readJson(request))];
+  }
   if (path.startsWith('/internal/')) return publication(request, env, path);
   if (path === '/config' && request.method === 'GET') {
     return [200, { accepting: env.INTAKE_MODE === 'live' && ready(env) }];

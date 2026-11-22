@@ -1,8 +1,10 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { cardCallback, handleCardAction, sendReviewCard } from './feishu-cards.mjs';
 
 const {
   BRIDGE_TOKEN, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_OWNER_OPEN_ID, PORT = 8080,
+  FEISHU_CALLBACK_ENCRYPT_KEY, FEISHU_CALLBACK_VERIFICATION_TOKEN, CARD_WORKER_URL, CARD_WORKER_TOKEN,
 } = process.env;
 export const definition = '2DD082C8-B2EA-41A2-9406-F7557C17A2B2';
 const base = 'https://open.feishu.cn/open-apis';
@@ -36,9 +38,9 @@ async function tenantToken() {
   return token;
 }
 
-async function feishu(path, body) {
+async function feishuApi(path, body) {
   const authorization = 'Bearer ' + await tenantToken();
-  const response = await fetch(base + approval + path, {
+  const response = await fetch(base + path, {
     method: body ? 'POST' : 'GET',
     headers: { Authorization: authorization, 'Content-Type': 'application/json' },
     body: body && JSON.stringify(body),
@@ -49,6 +51,8 @@ async function feishu(path, body) {
   if (!response.ok || data.code !== 0) throw new FeishuError(data.code ?? response.status);
   return data.data;
 }
+
+const feishu = (path, body) => feishuApi(approval + path, body);
 
 const fields = [
   ['title', 'resource_name', '资源名称'],
@@ -131,15 +135,15 @@ function sameSecret(actual) {
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
-async function bodyFrom(request) {
+async function rawBody(request, limit = 8192) {
   const body = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 8192) throw new Error('Invalid body');
+    if (size > limit) throw new Error('Invalid body');
     body.push(chunk);
   }
-  return JSON.parse(Buffer.concat(body).toString('utf8'));
+  return Buffer.concat(body);
 }
 
 function reply(response, status, data) {
@@ -147,10 +151,58 @@ function reply(response, status, data) {
   response.end(JSON.stringify(data));
 }
 
+async function bodyFrom(request) {
+  return JSON.parse((await rawBody(request)).toString('utf8'));
+}
+
+async function dispatchCardAction(action) {
+  if (!CARD_WORKER_URL || !CARD_WORKER_TOKEN) throw new Error('Card backend unavailable');
+  const response = await fetch(new URL('/internal/card-action', CARD_WORKER_URL), {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + CARD_WORKER_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(action),
+    redirect: 'error',
+    signal: AbortSignal.timeout(2000),
+  });
+  if (!response.ok) throw new Error('Card backend unavailable');
+  return response.json();
+}
+
+async function receiveCard(request, response) {
+  if (!FEISHU_CALLBACK_ENCRYPT_KEY || !FEISHU_CALLBACK_VERIFICATION_TOKEN) {
+    return reply(response, 503, { error: 'Callback unavailable' });
+  }
+  let body;
+  try {
+    body = await rawBody(request, 32_768);
+  } catch {
+    return reply(response, 400, { error: 'Invalid callback body' });
+  }
+  const action = cardCallback(body, request.headers, {
+    encryptKey: FEISHU_CALLBACK_ENCRYPT_KEY,
+    verificationToken: FEISHU_CALLBACK_VERIFICATION_TOKEN,
+    appId: FEISHU_APP_ID,
+    owner: FEISHU_OWNER_OPEN_ID,
+  });
+  if (!action) return reply(response, 403, { error: 'Invalid callback' });
+  try {
+    return reply(response, 200, await handleCardAction(action, dispatchCardAction));
+  } catch {
+    return reply(response, 200, { toast: { type: 'warning', content: '暂时无法确认本次操作，请再次点击查看最新状态。' } });
+  }
+}
+
 export const server = http.createServer(async (request, response) => {
   if (request.url === '/health' && request.method === 'GET') return reply(response, 200, { alive: true });
+  if (request.url === '/feishu/card-callback' && request.method === 'POST') return receiveCard(request, response);
   if (!sameSecret(request.headers.authorization)) return reply(response, 401, { error: 'Unauthorized' });
   try {
+    if (request.method === 'POST' && request.url === '/cards') {
+      if (![FEISHU_CALLBACK_ENCRYPT_KEY, FEISHU_CALLBACK_VERIFICATION_TOKEN, CARD_WORKER_URL, CARD_WORKER_TOKEN].every(Boolean)) {
+        return reply(response, 503, { error: 'Card delivery unavailable' });
+      }
+      return reply(response, 200, await sendReviewCard(feishuApi, FEISHU_OWNER_OPEN_ID, await bodyFrom(request)));
+    }
     if (request.method === 'POST' && request.url === '/approvals') {
       return reply(response, 200, await startApproval(feishu, FEISHU_OWNER_OPEN_ID, await bodyFrom(request)));
     }

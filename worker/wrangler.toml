@@ -7,6 +7,7 @@ preview_urls = false
 [vars]
 SITE_ORIGIN = "https://hinome-tech.pages.dev"
 INTAKE_MODE = "closed"
+APPROVAL_MODE = "native"
 
 [triggers]
 crons = ["*/5 * * * *"]

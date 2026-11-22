@@ -4,12 +4,14 @@ import { query } from './security.mjs';
 const minute = 60_000;
 const day = 1440 * minute;
 const leaseLength = 150_000;
+const cardDeliveryWindow = 50 * minute;
 
 async function claim(db, state, limit) {
   const lease = crypto.randomUUID();
   const now = Date.now();
   const { results } = await query(db, `UPDATE submissions SET lease = ?, leased_until = ?
     WHERE id IN (SELECT id FROM submissions WHERE state = ? AND next_at <= ?
+      AND (state <> 'review' OR review_channel = 'native')
       AND (leased_until IS NULL OR leased_until < ?) ORDER BY next_at LIMIT ?)
     RETURNING *`, lease, now + leaseLength, state, now, now, limit).all();
   return results;
@@ -96,9 +98,36 @@ export async function checkPublication(env, row) {
   return JSON.stringify(editedFields(fields)) === JSON.stringify(editedFields(JSON.parse(row.edited)));
 }
 
+async function deliverReviewCard(env, row) {
+  const db = env.DB;
+  let key = row.card_key;
+  const now = Date.now();
+  if (!key) {
+    const started = await query(db, `UPDATE submissions SET card_key = ?, card_issued_at = ?
+      WHERE id = ? AND lease = ? AND card_key IS NULL RETURNING card_key`,
+    crypto.randomUUID(), now, row.id, row.lease).first();
+    if (!started) return;
+    key = started.card_key;
+  } else if (now - row.card_issued_at >= cardDeliveryWindow) {
+    // Feishu message UUIDs stop deduplicating after one hour. Leave uncertain deliveries for
+    // reconciliation instead of sending a second card whose original might still be visible.
+    await query(db, `UPDATE submissions SET last_error = 'card_delivery_unconfirmed',
+      next_at = 8640000000000, lease = NULL, leased_until = NULL
+      WHERE id = ? AND lease = ?`, row.id, row.lease).run();
+    return;
+  }
+  const delivered = await feishu(env, '/cards', {
+    id: row.id, key, title: row.title, url: row.url, section: row.section,
+    description: row.description, tags: existingTags(JSON.parse(row.tags)), test: Boolean(row.test),
+  });
+  if (!/^om_[A-Za-z0-9_-]{4,120}$/.test(delivered.messageId)) throw new Error('card_delivery_missing_id');
+  return advance(db, row, 'review', { card_message_id: delivered.messageId });
+}
+
 async function processSubmission(env, row) {
   const db = env.DB;
   if (row.state === 'submitted') {
+    if (row.review_channel === 'card') return deliverReviewCard(env, row);
     const submitted = await feishu(env, '/approvals', {
       id: row.id, title: row.title, url: row.url, section: row.section,
       description: row.description, tags: existingTags(JSON.parse(row.tags)), test: Boolean(row.test),
@@ -143,7 +172,7 @@ export async function runJobs(env) {
         try {
           await processSubmission(env, row);
         } catch (error) {
-          const key = /^(?:feishu_(?:timeout|network|http_[1-5][0-9]{2})|approval_instance_missing|approval_decision_unavailable)$/.test(error.message)
+          const key = /^(?:feishu_(?:timeout|network|http_[1-5][0-9]{2})|approval_instance_missing|approval_decision_unavailable|card_delivery_missing_id)$/.test(error.message)
             ? error.message : 'processing';
           await postpone(db, row, `retry_${state}:${key}`);
         }
