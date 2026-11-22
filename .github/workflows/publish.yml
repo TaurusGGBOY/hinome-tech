@@ -95,10 +95,17 @@ jobs:
             if [[ "$relative_path" == index.html ]]; then
               relative_path=""
             fi
-            if ! curl --compressed --retry 2 --connect-timeout 10 --max-time 30 -fsSL "$PUBLIC_URL$relative_path" | cmp -s "$file" -; then
-              echo "::error::Could not match the public response to $file."
-              exit 1
-            fi
+            for attempt in 1 2 3 4 5 6; do
+              if curl --compressed --retry 1 --connect-timeout 6 --max-time 12 \
+                -H 'Cache-Control: no-cache' -fsSL "$PUBLIC_URL$relative_path" | cmp -s "$file" -; then
+                break
+              fi
+              if [[ "$attempt" == 6 ]]; then
+                echo "::error::Could not match the public response to $file."
+                exit 1
+              fi
+              sleep 5
+            done
           done < <(find public -type f -print0)
           node scripts/browser-smoke.cjs "$PUBLIC_URL"
 
