@@ -1,5 +1,14 @@
 (() => {
-  const groups = window.RESOURCE_GROUPS;
+  const groups = window.RESOURCE_GROUPS.map((group) => ({
+    ...group,
+    items: [
+      ...group.items,
+      ...window.HINOME_RECOMMENDATIONS.filter((entry) => entry.section === group.title)
+        .map(({ title, url, description, tags }) => ({
+          title, url, description, tags, aliases: [], icon: 'site',
+        })),
+    ],
+  }));
 
   const normalize = (value) =>
     value.normalize('NFKC').toLocaleLowerCase().trim();

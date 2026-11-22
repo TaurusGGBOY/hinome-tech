@@ -1,5 +1,5 @@
 // 资源目录的唯一维护来源。调整分类、文案或链接时只需编辑此文件。
-window.RESOURCE_GROUPS = [
+globalThis.RESOURCE_GROUPS = [
   {
     title: '实用工具',
     items: [

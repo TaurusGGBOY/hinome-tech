@@ -24,6 +24,7 @@ async function main() {
         '.html': 'text/html; charset=utf-8',
         '.css': 'text/css',
         '.js': 'text/javascript',
+        '.json': 'application/json',
         '.webp': 'image/webp',
         '.svg': 'image/svg+xml',
         '.png': 'image/png',
@@ -152,6 +153,47 @@ async function main() {
       await siteDialog.getByRole('button', { name: '关闭关于本站' }).click();
       assert.equal(await siteDialog.count(), 0);
       assert.equal(page.url(), homeUrl);
+      const recommendation = page.getByRole('dialog', { name: '提交推荐' });
+      const endpoint = 'https://hinome-tech-recommendations.gaoguobin12.workers.dev';
+      await page.route(endpoint + '/**', async (route) => {
+        const apiRequest = route.request();
+        const pathname = new URL(apiRequest.url()).pathname;
+        const id = 'e406d964-3fcc-4506-8dcb-8835c4558dbe';
+        const data = {
+          '/config': { accepting: true },
+          '/results': { decisions: [] },
+          '/submit': { id },
+          ['/status/' + id]: { id, status: 'rejected', reason: '与本站主题不符' },
+        }[pathname];
+        assert(data, 'Unexpected recommendation request');
+        if (apiRequest.method() === 'POST') {
+          assert.deepEqual(Object.keys(apiRequest.postDataJSON()).sort(),
+            ['description', 'section', 'tags', 'title', 'url']);
+        }
+        await route.fulfill({
+          status: 200,
+          headers: { 'Access-Control-Allow-Origin': '*' },
+          json: data,
+        });
+      });
+      const entry = footer.getByRole('button', { name: '提交推荐' });
+      const footerRows = await footer.locator('.footer-links').evaluate((line) =>
+        Array.from(line.querySelectorAll('a,button'), (item) => {
+          const { top, height } = item.getBoundingClientRect();
+          return top + height / 2;
+        }));
+      assert(footerRows.every((top) => Math.abs(top - footerRows[0]) < 1));
+      await entry.click();
+      await recommendation.getByLabel('资源名称').fill('联调目录资源');
+      await recommendation.getByLabel('资源链接').fill('https://example.org/qa');
+      await recommendation.getByLabel('建议分区').selectOption('实用工具');
+      await recommendation.getByLabel('简介').fill('本地或 CI 验收。');
+      await recommendation.getByRole('button', { name: '提交推荐', exact: true }).click();
+      await recommendation.getByText(/推荐已提交，等待审核/).waitFor();
+      await recommendation.getByRole('button', { name: '查询', exact: true }).click();
+      await recommendation.getByText('未收录 · 与本站主题不符', { exact: true }).waitFor();
+      await recommendation.getByRole('button', { name: '关闭提交推荐' }).click();
+      assert(await entry.evaluate((el) => el === document.activeElement));
       await page.goto(new URL('about.html#hinome-eye', url).href);
       await siteDialog.waitFor();
       assert.equal(new URL(page.url()).pathname, new URL(homeUrl).pathname);

@@ -1,0 +1,26 @@
+name = "hinome-tech-recommendations"
+main = "index.mjs"
+compatibility_date = "2026-11-22"
+workers_dev = true
+preview_urls = false
+
+[vars]
+SITE_ORIGIN = "https://hinome-tech.pages.dev"
+INTAKE_MODE = "closed"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hinome-tech-recommendations"
+database_id = "e6bf23fc-bea3-42c6-9953-fc3bd0766d3c"
+migrations_dir = "migrations"
+
+[[ratelimits]]
+name = "EDGE_LIMIT"
+namespace_id = "4611071"
+simple = { limit = 12, period = 60 }
+
+[ai]
+binding = "AI"

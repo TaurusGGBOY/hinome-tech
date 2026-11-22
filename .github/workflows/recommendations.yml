@@ -1,0 +1,31 @@
+name: Queue approved recommendations for publication
+
+on:
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    if: github.repository == 'TaurusGGBOY/hinome-tech' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RECOMMENDATION_TOKEN: ${{ secrets.RECOMMENDATION_PUBLISH_TOKEN }}
+      RECOMMENDATION_API: https://hinome-tech-recommendations.gaoguobin12.workers.dev
+    steps:
+      - name: Check for approved work
+        shell: bash
+        run: |
+          if [[ -z "$RECOMMENDATION_TOKEN" ]]; then exit 0; fi
+          packet="$(curl --silent --show-error --fail --max-time 25 -X POST \
+            -H "Authorization: Bearer $RECOMMENDATION_TOKEN" "$RECOMMENDATION_API/internal/claim")"
+          id="$(jq -er '.id // ""' <<< "$packet")"
+          if [[ -n "$id" ]]; then
+            [[ "$id" =~ ^[0-9a-f-]{36}$ ]]
+            gh workflow run publish.yml -R "$GITHUB_REPOSITORY" --ref main -f recommendation_id="$id"
+          fi

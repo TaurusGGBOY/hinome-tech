@@ -7,6 +7,10 @@ on:
         description: 'Pre-release tag for this site. Leave empty to verify the candidate only.'
         required: false
         type: string
+      recommendation_id:
+        description: 'Approved recommendation receipt. Used by the recommendation queue.'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +28,9 @@ jobs:
       contents: write
     env:
       RELEASE_TAG: ${{ inputs.release_tag }}
+      SITE_SHA: ${{ github.sha }}
+      RECOMMENDATION_ID: ${{ inputs.recommendation_id }}
+      RECOMMENDATION_API: https://hinome-tech-recommendations.gaoguobin12.workers.dev
       PUBLIC_URL: https://hinome-tech.pages.dev/
       CHROME_PATH: /opt/hinome-ci-tools/bin/google-chrome
     steps:
@@ -35,23 +42,36 @@ jobs:
       - name: Use preinstalled CI tools
         run: echo "/opt/hinome-ci-tools/bin" >> "$GITHUB_PATH"
 
+      - name: Prepare the approved catalog contribution
+        id: recommendation
+        if: inputs.recommendation_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOMMENDATION_TOKEN: ${{ secrets.RECOMMENDATION_PUBLISH_TOKEN }}
+        run: |
+          [[ -z "$RELEASE_TAG" ]]
+          bash scripts/prepare-recommendation.sh
+
       - name: Verify candidate in the browser
+        if: steps.recommendation.outputs.skip != 'true'
         run: |
           npm ci
+          npm run test:recommend
           node scripts/browser-smoke.cjs
 
       - name: Verify the release tag contains the same site
-        if: inputs.release_tag != ''
+        if: env.RELEASE_TAG != '' && steps.recommendation.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          git fetch --tags origin
           tagged_commit="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
-          git diff --exit-code "$tagged_commit" "$GITHUB_SHA" -- public/
+          git diff --exit-code "$tagged_commit" "$SITE_SHA" -- public/
           gh release view "$RELEASE_TAG" --json isDraft,isPrerelease |
             jq -e '.isPrerelease and (.isDraft | not)' >/dev/null
 
       - name: Deploy to Cloudflare Pages
-        if: inputs.release_tag != ''
+        if: env.RELEASE_TAG != '' && steps.recommendation.outputs.skip != 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -61,10 +81,10 @@ jobs:
             export HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 CHROME_PROXY=http://127.0.0.1:7890
           fi
           npx --yes wrangler@4.152.0 pages deploy public \
-            --project-name hinome-tech --branch main --commit-hash "$GITHUB_SHA"
+            --project-name hinome-tech --branch main --commit-hash "$SITE_SHA"
 
       - name: Verify the published site
-        if: inputs.release_tag != ''
+        if: env.RELEASE_TAG != '' && steps.recommendation.outputs.skip != 'true'
         shell: bash
         run: |
           if (echo >/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
@@ -83,10 +103,19 @@ jobs:
           node scripts/browser-smoke.cjs "$PUBLIC_URL"
 
       - name: Mark the verified release as stable
-        if: inputs.release_tag != ''
+        if: env.RELEASE_TAG != '' && steps.recommendation.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$RELEASE_TAG" --prerelease=false --latest
+
+      - name: Confirm the recommendation is live
+        if: inputs.recommendation_id != ''
+        env:
+          RECOMMENDATION_TOKEN: ${{ secrets.RECOMMENDATION_PUBLISH_TOKEN }}
+        run: |
+          curl --silent --show-error --fail --max-time 30 --retry 2 -X POST \
+            -H "Authorization: Bearer $RECOMMENDATION_TOKEN" \
+            "$RECOMMENDATION_API/internal/publication/$RECOMMENDATION_ID" >/dev/null
 
       - name: Clean workspace dependencies and expired caches
         if: always()

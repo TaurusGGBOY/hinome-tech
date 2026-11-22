@@ -486,3 +486,33 @@ footer {
     transition: none;
   }
 }
+
+.footer-links { display: flex; align-items: center; justify-content: center; gap: .35em; white-space: nowrap; }
+.footer-links .about-trigger { font: inherit; }
+.recommend-dialog [hidden] { display: none; }
+.recommend-dialog fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+.recommend-dialog label { display: grid; gap: .35rem; margin-bottom: .8rem; color: var(--resource-title); }
+.recommend-dialog input, .recommend-dialog select, .recommend-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: .55rem .65rem;
+  border-radius: .4rem;
+  border: 1px solid #b7d8f27a;
+  color: #fff;
+  background: #25394c;
+  font: inherit;
+}
+.recommend-dialog textarea { resize: vertical; }
+.recommend-submit {
+  padding: .5rem .85rem;
+  border: 1px solid #ffd4a6;
+  border-radius: .4rem;
+  background: #ffd4a6;
+  color: #24384a;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.recommend-submit:disabled { opacity: .55; cursor: default; }
+#recommend-status { min-height: 1.4em; }
+#recommend-results { padding-left: 1.4rem; overflow-wrap: anywhere; }

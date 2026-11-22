@@ -1,6 +1,6 @@
 {
   "name": "hinome-tech",
   "private": true,
-  "scripts": { "test:browser": "node scripts/browser-smoke.cjs" },
+  "scripts": { "test:browser": "node scripts/browser-smoke.cjs", "test:recommend": "node --test scripts/recommendations.test.mjs" },
   "devDependencies": { "playwright": "1.56.1" }
 }

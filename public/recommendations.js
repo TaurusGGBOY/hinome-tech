@@ -1,0 +1,1 @@
+window.HINOME_RECOMMENDATIONS = [];
