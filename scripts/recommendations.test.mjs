@@ -138,9 +138,50 @@ test('real decision field flows separately into an allowlisted edit and awaits v
   });
 });
 
+test('the scheduled retry recovers an already-approved submission without an opinion', async (t) => {
+  const { sql, env, request } = fixture();
+  let now = testTime;
+  t.mock.method(Date, 'now', () => now);
+  const approvalId = crypto.randomUUID();
+  let response = new Response(null, { status: 503 });
+  let editorialInput;
+  let attempts = 0;
+  env.AI = { run: async (_model, input) => {
+    editorialInput = JSON.parse(input.messages[1].content);
+    assert.match(input.messages[0].content, /没有填写编辑意见时，依据投稿原文/);
+    return { response: modelFields };
+  }};
+  t.mock.method(globalThis, 'fetch', async (input, options) => {
+    if (options.method === 'POST') return Response.json({ instance: approvalId });
+    assert.equal(new URL(input).pathname, '/approvals/' + approvalId);
+    attempts++;
+    return response.clone();
+  });
+  assert.equal((await request('/submit', proposed)).status, 202);
+  await runJobs(env);
+  const row = () => sql.prepare('SELECT state, next_at, last_error, opinion FROM submissions').get();
+  assert.equal(row().state, 'review');
+  assert.equal(row().last_error, 'retry_review:feishu_http_503');
+
+  response = Response.json({ status: 'approved' });
+  now = row().next_at - 1;
+  await runJobs(env);
+  assert.equal(attempts, 1);
+  assert.equal(row().state, 'review');
+
+  now++;
+  await runJobs(env);
+  assert.equal(attempts, 2);
+  assert.equal(row().state, 'publish');
+  assert.equal(row().opinion, '');
+  assert.equal(row().last_error, null);
+  assert.equal(Object.hasOwn(editorialInput, '站长编辑意见'), false);
+  assert.equal(editorialInput.投稿原文.简介, proposed.description);
+});
+
 test('rejection, pending and tests are private, and old public routes are gone', async (t) => {
   const { sql, env, request } = fixture();
-  env.AI = {};
+  env.AI = { run: async () => { assert.fail('Rejected submissions must not reach editing'); } };
   env.INTAKE_MODE = 'test';
   assert.equal((await request('/submit', proposed)).status, 503);
   const internal = await request('/internal/test', proposed, { internal: true });
@@ -148,12 +189,15 @@ test('rejection, pending and tests are private, and old public routes are gone',
   env.INTAKE_MODE = 'live';
   const live = await request('/submit', { ...proposed, url: proposed.url + '2', tags: [] });
   assert.equal(live.status, 202);
-  t.mock.method(globalThis, 'fetch', async () => Response.json({
-    status: 'rejected', opinion: '内部审批意见。',
+  t.mock.method(globalThis, 'fetch', async (input) => Response.json({
+    status: 'rejected',
+    opinion: new URL(input).pathname.endsWith(internal.body.id) ? '内部审批意见。' : ' \n  ',
   }));
   sql.exec("UPDATE submissions SET state = 'review', approval_id = id");
   await runJobs(env);
   assert.equal(sql.prepare("SELECT count(*) AS n FROM submissions WHERE state='rejected'").get().n, 2);
+  assert.equal(sql.prepare('SELECT opinion FROM submissions WHERE test=0').get().opinion, '');
+  assert.equal(sql.prepare('SELECT opinion FROM submissions WHERE test=1').get().opinion, '内部审批意见。');
   const id = sql.prepare('SELECT id FROM submissions WHERE test = 0').get().id;
   assert.equal((await request('/results')).status, 404);
   assert.equal((await request('/status/' + id)).status, 404);
@@ -195,7 +239,7 @@ test('edited content preserves selected catalog tags without delegating them to 
   await assert.rejects(generateEntry(env, row), /invalid_edit/);
 });
 
-test('Feishu maps dynamic fields, recovers duplicate instance and requires the owner’s matching decision node', async () => {
+test('Feishu maps dynamic fields and recovers a duplicate instance', async () => {
   const fields = ['资源名称', '来源链接', '分区', '资源简介'];
   const spec = { form: JSON.stringify(fields.map((name, i) => ({ type: 'input', name, id: 'new-' + i }))) };
   const candidate = { ...proposed, test: true, tags: ['回顾'], id: crypto.randomUUID() };
@@ -211,10 +255,51 @@ test('Feishu maps dynamic fields, recovers duplicate instance and requires the o
     return approval;
   }, owner, candidate);
   assert.deepEqual(recovered, { instance });
-  const decision = { ...approval,
-    status: 'APPROVED', task_list: [{ open_id: owner, status: 'APPROVED', id: 'matching-task' }],
-    timeline: [{ type: 'PASS', task_id: 'matching-task', open_id: owner, comment: ' 很有精神 ' }],
+});
+
+test('terminal owner decisions allow absent opinions and preserve supplied text verbatim', () => {
+  const instance = crypto.randomUUID();
+  for (const [status, event] of [['APPROVED', 'PASS'], ['REJECTED', 'REJECT']]) {
+    const decision = {
+      instance_code: instance.toUpperCase(), approval_code: definition, open_id: owner, status,
+      task_list: [{ open_id: owner, status, id: 'matching-task' }],
+    };
+    const timeline = { type: event, task_id: 'matching-task', open_id: owner };
+    for (const comment of [{}, { comment: null }, { comment: '' }, { comment: ' \n\t ' }]) {
+      assert.deepEqual(approvalDecision({ ...decision, timeline: [{ ...timeline, ...comment }] }, owner, instance),
+        { status: status.toLowerCase(), opinion: '' });
+    }
+    const opinion = ' 很有精神 \n';
+    assert.deepEqual(approvalDecision({ ...decision, timeline: [{ ...timeline, comment: opinion }] }, owner, instance),
+      { status: status.toLowerCase(), opinion });
+    assert.throws(() => approvalDecision({ ...decision, timeline: [{ ...timeline, comment: { value: '' } }] }, owner, instance),
+      /Invalid approval opinion/);
+  }
+});
+
+test('an empty opinion cannot stand in for this instance’s genuine owner decision', () => {
+  const instance = crypto.randomUUID();
+  const timeline = { type: 'PASS', task_id: 'matching-task', open_id: owner };
+  const decision = {
+    instance_code: instance, approval_code: definition, open_id: owner, status: 'APPROVED',
+    task_list: [{ open_id: owner, status: 'APPROVED', id: 'matching-task' }],
+    timeline: [timeline],
   };
-  assert.deepEqual(approvalDecision(decision, owner), { status: 'approved', opinion: ' 很有精神 ' });
-  assert.throws(() => approvalDecision({ ...decision, timeline: [{ type: 'PASS', comment: '自动通过' }] }, owner));
+  for (const mismatch of [
+    { instance_code: crypto.randomUUID() },
+    { approval_code: crypto.randomUUID() },
+    { open_id: 'another-submitter' },
+    { reverted: true },
+    { status: 'REJECTED' },
+    { task_list: [{ ...decision.task_list[0], status: 'PENDING' }] },
+    { task_list: [{ ...decision.task_list[0], open_id: 'another-reviewer' }] },
+    { timeline: [{ ...timeline, task_id: 'another-node' }] },
+    { timeline: [{ ...timeline, open_id: 'another-reviewer' }] },
+    { timeline: [{ ...timeline, open_id: undefined }] },
+    { timeline: [{ ...timeline, type: 'AUTO_PASS' }] },
+    { timeline: [timeline, timeline] },
+  ]) {
+    assert.throws(() => approvalDecision({ ...decision, ...mismatch }, owner, instance), /approval identity|human decision/);
+  }
+  assert.deepEqual(approvalDecision({ ...decision, status: 'PENDING', timeline: [] }, owner, instance), { status: 'pending' });
 });

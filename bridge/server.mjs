@@ -78,8 +78,9 @@ export function approvalForm(spec, recommendation) {
   });
 }
 
-export function approvalDecision(data, reviewer) {
-  if (data.approval_code !== definition || data.open_id !== reviewer) {
+export function approvalDecision(data, reviewer, instance) {
+  if (typeof data.instance_code !== 'string' || data.instance_code.toLowerCase() !== instance.toLowerCase() ||
+      data.approval_code !== definition || data.open_id !== reviewer || data.reverted === true) {
     throw new Error('Unexpected approval identity');
   }
   if (data.status === 'PENDING') return { status: 'pending' };
@@ -89,11 +90,13 @@ export function approvalDecision(data, reviewer) {
     .filter((task) => task.open_id === reviewer && task.status === data.status && task.id)
     .map((task) => String(task.id)));
   const matching = (data.timeline ?? []).filter((item) =>
-    item.type === event && tasks.has(String(item.task_id)) && (!item.open_id || item.open_id === reviewer));
-  if (matching.length !== 1 || typeof matching[0].comment !== 'string' || !matching[0].comment.trim()) {
-    throw new Error('Missing human decision or opinion');
+    item.type === event && item.open_id === reviewer && tasks.has(String(item.task_id)));
+  if (matching.length !== 1) throw new Error('Missing or ambiguous human decision');
+  const { comment } = matching[0];
+  if (comment != null && typeof comment !== 'string') {
+    throw new Error('Invalid approval opinion');
   }
-  return { status: data.status.toLowerCase(), opinion: matching[0].comment };
+  return { status: data.status.toLowerCase(), opinion: comment?.trim() ? comment : '' };
 }
 
 export async function startApproval(api, openId, data) {
@@ -154,7 +157,7 @@ export const server = http.createServer(async (request, response) => {
     const instance = /^\/approvals\/([^/?]+)$/.exec(request.url)?.[1];
     if (request.method === 'GET' && instance && uuid.test(instance)) {
       const data = await feishu('/instances/' + instance);
-      return reply(response, 200, approvalDecision(data, FEISHU_OWNER_OPEN_ID));
+      return reply(response, 200, approvalDecision(data, FEISHU_OWNER_OPEN_ID, instance));
     }
     return reply(response, 404, { error: 'Not found' });
   } catch (error) {
