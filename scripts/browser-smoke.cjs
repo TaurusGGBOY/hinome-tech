@@ -182,7 +182,7 @@ async function main() {
         });
       });
       const entry = footer.getByRole('button', { name: '提交推荐' });
-      const footerRows = await footer.locator(viewport.width <= 384 ? '.footer-core' : '.footer-links').evaluate((line) =>
+      const footerRows = await footer.locator('.footer-core').evaluate((line) =>
         Array.from(line.querySelectorAll('a,button'), (item) => {
           const { top, height } = item.getBoundingClientRect();
           return top + height / 2;

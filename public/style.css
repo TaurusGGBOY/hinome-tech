@@ -497,6 +497,7 @@ footer {
 .footer-links { flex-wrap: wrap; }
 .footer-extra::before { content: '·' / ''; }
 @media (max-width: 384px) {
+  .footer-core { gap: .28em; font-size: .93em; }
   .footer-extra { flex-basis: 100%; }
   .footer-extra::before { content: none; }
 }
