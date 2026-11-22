@@ -90,11 +90,12 @@ async function processSubmission(env, row) {
       description: row.description, tags: JSON.parse(row.tags), test: Boolean(row.test),
     });
     if (!/^[0-9a-f-]{36}$/i.test(submitted.instance ?? '')) throw new Error('approval_instance_missing');
-    return advance(db, row, 'review', { approval_id: submitted.instance }, 5 * minute);
+    return advance(db, row, 'review', { approval_id: submitted.instance });
   }
   if (row.state === 'review') {
     const decision = await feishu(env, '/approvals/' + row.approval_id);
-    if (decision.status === 'pending') return advance(db, row, 'review', {}, 5 * minute);
+    // Leave room for cron jitter so a pending row is due at the next five-minute tick.
+    if (decision.status === 'pending') return advance(db, row, 'review', {}, 4 * minute);
     if (!['approved', 'rejected'].includes(decision.status) || typeof decision.opinion !== 'string' ||
         !decision.opinion.trim() || decision.opinion.length > 4000) throw new Error('approval_decision_unavailable');
     const columns = { opinion: decision.opinion, decided: Date.now() };
