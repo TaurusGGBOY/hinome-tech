@@ -492,7 +492,7 @@ footer {
 .recommend-dialog [hidden] { display: none; }
 .recommend-dialog fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
 .recommend-dialog label { display: grid; gap: .35rem; margin-bottom: .8rem; color: var(--resource-title); }
-.recommend-dialog input, .recommend-dialog select, .recommend-dialog textarea {
+.recommend-dialog input:not([type=checkbox]), .recommend-dialog select, .recommend-dialog textarea {
   box-sizing: border-box;
   width: 100%;
   padding: .55rem .65rem;
@@ -515,4 +515,29 @@ footer {
 }
 .recommend-submit:disabled { opacity: .55; cursor: default; }
 #recommend-status { min-height: 1.4em; }
-#recommend-results { padding-left: 1.4rem; overflow-wrap: anywhere; }
+.tag-picker { margin-bottom: .9rem; }
+.tag-picker summary { color: var(--resource-title); cursor: pointer; }
+.tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .9rem;
+  max-height: 10rem;
+  overflow-y: auto;
+  padding: .55rem 0;
+}
+.recommend-dialog .tag-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  color: var(--tag);
+  margin: 0;
+}
+.tag-options input { accent-color: #ffd4a6; }
+.tag-count { font-size: .9rem; margin: .2rem 0 .45rem; }
+.updates-dialog article { border-top: 1px solid #b7d8f24d; padding: .8rem 0; }
+.updates-dialog article small { color: var(--section-title); }
+.updates-dialog article h3 { margin: .35rem 0; font-size: 1.05rem; }
+.updates-dialog article p { margin: .25rem 0 0; }
+#updates-status:empty { display: none; }
+#updates-list { margin-top: .65rem; }
+#updates-more { margin-top: .5rem; }

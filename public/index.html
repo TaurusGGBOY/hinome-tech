@@ -56,11 +56,12 @@
         </section>
       </main>
       <footer>
-        <p class="site-summary">在这里查找火羽ひのめ的直播回放、资料、实用工具与粉丝作品。</p>
+        <p class="site-summary">非官方粉丝导航。这里可以查找火羽ひのめ的直播回放、资料、实用工具与粉丝作品。</p>
         <div class="footer-links">
-        <button type="button" class="about-trigger" data-dialog="about-site" aria-haspopup="dialog" aria-controls="about-site">关于本站</button> ·
-        <a href="https://space.bilibili.com/1302404" target="_blank" rel="noopener noreferrer">联系作者 · 游戏memory</a> ·
-        <button type="button" class="about-trigger" data-dialog="recommend" aria-haspopup="dialog" aria-controls="recommend">提交推荐</button>
+          <button type="button" class="about-trigger" data-dialog="about-site" aria-haspopup="dialog" aria-controls="about-site">关于本站</button> ·
+          <a href="https://space.bilibili.com/1302404" target="_blank" rel="noopener noreferrer">联系作者 · 游戏memory</a> ·
+          <button type="button" class="about-trigger" data-dialog="recommend" aria-haspopup="dialog" aria-controls="recommend">提交推荐</button> ·
+          <button type="button" class="about-trigger" data-dialog="updates" aria-haspopup="dialog" aria-controls="updates">更新记录</button>
         </div>
       </footer>
     </div>
@@ -69,7 +70,7 @@
         <h2 id="recommend-title">提交推荐</h2>
         <form method="dialog"><button type="submit" aria-label="关闭提交推荐" autofocus>×</button></form>
       </div>
-      <p>推荐火羽相关的工具、资料或作品。提交后请保存编号，可在这里查询审核结果。</p>
+      <p>推荐火羽相关的工具、资料或作品。</p>
       <p role="status" id="recommend-status" aria-live="polite"></p>
       <form id="recommend-form">
         <fieldset>
@@ -77,20 +78,23 @@
           <label>资源链接<input name="url" type="url" placeholder="https://" maxlength="2048" required /></label>
           <label>建议分区<select name="section" required><option value="">请选择</option></select></label>
           <label>简介<textarea name="description" rows="3" maxlength="800" required></textarea></label>
-          <label>标签（选填，逗号分隔）<input name="tags" maxlength="120" /></label>
+          <details class="tag-picker">
+            <summary>选择已有标签（选填）</summary>
+            <div class="tag-options" role="group" aria-label="已有标签"></div>
+            <p class="tag-count" aria-live="polite">最多选 6 个。</p>
+          </details>
           <button class="recommend-submit" type="submit" disabled>提交推荐</button>
         </fieldset>
       </form>
-      <section aria-labelledby="recommend-results-title">
-        <h3 id="recommend-results-title">审核结果</h3>
-        <form id="recommend-lookup">
-          <label>按编号查询<input name="receipt" maxlength="36" required /></label>
-          <button type="submit" class="recommend-submit">查询</button>
-          <p role="status" id="recommend-lookup-status"></p>
-        </form>
-        <p id="recommend-results-status"></p>
-        <ul id="recommend-results" hidden></ul>
-      </section>
+    </dialog>
+    <dialog class="about-dialog updates-dialog" id="updates" aria-labelledby="updates-title">
+      <div class="about-heading">
+        <h2 id="updates-title">更新记录</h2>
+        <form method="dialog"><button type="submit" aria-label="关闭更新记录" autofocus>×</button></form>
+      </div>
+      <p id="updates-status" role="status"></p>
+      <div id="updates-list"></div>
+      <button type="button" class="recommend-submit" id="updates-more" hidden>查看更多</button>
     </dialog>
     <dialog class="about-dialog" id="about-site" aria-labelledby="about-site-title">
       <div class="about-heading">
@@ -110,7 +114,7 @@
         <section aria-labelledby="sources-title">
           <h3 id="sources-title">资料来源与反馈</h3>
           <p>目录链接指向原站或原投稿。转载录像和个人回顾的出处、作者与语境可在原页面查阅。秋景背景和资源图标的制作记录见<a href="https://github.com/TaurusGGBOY/hinome-tech/blob/main/docs/image-source.md">图片来源</a>。</p>
-          <p>如果发现错链、简介有误，或想补充资源，可以到 <a href="https://github.com/TaurusGGBOY/hinome-tech/issues">GitHub 反馈</a>，附上资源名称、原始链接和建议修改的内容。</p>
+          <p>如果发现错链或简介有误，可以到 <a href="https://github.com/TaurusGGBOY/hinome-tech/issues">GitHub 反馈</a>，附上资源名称、原始链接和建议修改的内容。</p>
           <p><a href="https://space.bilibili.com/1302404" target="_blank" rel="noopener noreferrer">联系作者 · 游戏memory（哔哩哔哩）</a></p>
         </section>
     </dialog>

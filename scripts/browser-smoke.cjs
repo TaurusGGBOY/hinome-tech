@@ -158,17 +158,21 @@ async function main() {
       await page.route(endpoint + '/**', async (route) => {
         const apiRequest = route.request();
         const pathname = new URL(apiRequest.url()).pathname;
-        const id = 'e406d964-3fcc-4506-8dcb-8835c4558dbe';
         const data = {
           '/config': { accepting: true },
-          '/results': { decisions: [] },
-          '/submit': { id },
-          ['/status/' + id]: { id, status: 'rejected', reason: '与本站主题不符' },
+          '/submit': { accepted: true },
+          '/updates': { updates: [
+            { published: Date.parse('2026-11-20T23:00:00Z'), section: '二创作品',
+              title: '较新资源', description: '新增一条二创资源。', url: 'https://example.org/recent' },
+            { published: Date.parse('2026-11-20T04:00:00Z'), section: '百科资料',
+              title: '较早资源', description: '新增一条百科资料。', url: 'https://example.org/earlier' },
+          ], next: null },
         }[pathname];
         assert(data, 'Unexpected recommendation request');
         if (apiRequest.method() === 'POST') {
-          assert.deepEqual(Object.keys(apiRequest.postDataJSON()).sort(),
-            ['description', 'section', 'tags', 'title', 'url']);
+          const submission = apiRequest.postDataJSON();
+          assert.deepEqual(Object.keys(submission).sort(), ['description', 'section', 'tags', 'title', 'url']);
+          assert.deepEqual(submission.tags, ['直播数据']);
         }
         await route.fulfill({
           status: 200,
@@ -183,17 +187,31 @@ async function main() {
           return top + height / 2;
         }));
       assert(footerRows.every((top) => Math.abs(top - footerRows[0]) < 1));
+      const updatePanel = page.getByRole('dialog', { name: '更新记录' });
+      assert.equal(await updatePanel.count(), 0);
       await entry.click();
+      assert.equal(await recommendation.getByText(/审核结果|按编号查询|更新记录/).count(), 0);
+      assert.equal(await recommendation.locator('[type=email], input[name=receipt], input[name=code]').count(), 0);
+      assert.equal(await recommendation.locator('input[name=tags]:not([type=checkbox])').count(), 0);
       await recommendation.getByLabel('资源名称').fill('联调目录资源');
       await recommendation.getByLabel('资源链接').fill('https://example.org/qa');
       await recommendation.getByLabel('建议分区').selectOption('实用工具');
       await recommendation.getByLabel('简介').fill('本地或 CI 验收。');
+      await recommendation.getByText('选择已有标签（选填）', { exact: true }).click();
+      await recommendation.getByRole('checkbox', { name: '直播数据', exact: true }).check();
       await recommendation.getByRole('button', { name: '提交推荐', exact: true }).click();
-      await recommendation.getByText(/推荐已提交，等待审核/).waitFor();
-      await recommendation.getByRole('button', { name: '查询', exact: true }).click();
-      await recommendation.getByText('未收录 · 与本站主题不符', { exact: true }).waitFor();
+      await recommendation.getByText('推荐已收到，感谢补充。', { exact: true }).waitFor();
       await recommendation.getByRole('button', { name: '关闭提交推荐' }).click();
       assert(await entry.evaluate((el) => el === document.activeElement));
+      const updateEntry = footer.getByRole('button', { name: '更新记录', exact: true });
+      await updateEntry.click();
+      await updatePanel.getByRole('link', { name: '较新资源' }).waitFor();
+      assert.deepEqual(await updatePanel.locator('article h3').allTextContents(), ['较新资源', '较早资源']);
+      assert.deepEqual(await updatePanel.locator('article time').allTextContents(), ['2026.11.21', '2026.11.20']);
+      assert.equal(await updatePanel.getByRole('link', { name: '较新资源' }).getAttribute('href'), 'https://example.org/recent');
+      assert(await updatePanel.getByText('新增一条二创资源。', { exact: true }).isVisible());
+      await updatePanel.getByRole('button', { name: '关闭更新记录' }).click();
+      assert(await updateEntry.evaluate((el) => el === document.activeElement));
       await page.goto(new URL('about.html#hinome-eye', url).href);
       await siteDialog.waitFor();
       assert.equal(new URL(page.url()).pathname, new URL(homeUrl).pathname);

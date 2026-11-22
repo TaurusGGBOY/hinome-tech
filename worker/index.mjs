@@ -1,4 +1,3 @@
-import '../public/resources.js';
 import { editedFields, linkKey, receiptPattern, submission } from './fields.mjs';
 import { checkPublication, runJobs } from './jobs.mjs';
 import { digest, equal, query } from './security.mjs';
@@ -49,7 +48,7 @@ async function submit(env, body, ip, test = false) {
   try {
     data = submission(body);
   } catch {
-    return error(400, '请核对表单内容，资源链接须使用 HTTPS。每个标签最多 20 字，最多 6 个。');
+    return error(400, '请核对表单内容。链接须使用 HTTPS，已有标签最多可选 6 个。');
   }
   const db = env.DB;
   const now = Date.now();
@@ -72,7 +71,7 @@ async function submit(env, body, ip, test = false) {
     }
     throw err;
   }
-  return [202, { id }];
+  return [202, test ? { id } : { accepted: true }];
 }
 
 async function publication(request, env, path) {
@@ -115,11 +114,25 @@ async function publication(request, env, path) {
   return error(405, 'Method not allowed');
 }
 
-function publicStatus({ id, state, edited, public_reason }) {
-  if (state === 'published') return { id, status: 'published', title: JSON.parse(edited).title };
-  if (state === 'rejected') return { id, status: 'rejected', reason: public_reason };
-  if (['edit', 'publish', 'deploy'].includes(state)) return { id, status: 'publishing' };
-  return { id, status: 'pending' };
+async function publishedUpdates(db, request) {
+  const cursor = new URL(request.url).searchParams.get('before');
+  const match = cursor && /^(\d{13}):([0-9a-f-]{36})$/.exec(cursor);
+  if (cursor && (!match || !receiptPattern.test(match[2]))) return error(400, '更新记录位置无效。');
+  const pageSize = 20;
+  const where = match ? 'AND (published < ? OR (published = ? AND id < ?))' : '';
+  const params = match ? [Number(match[1]), Number(match[1]), match[2], pageSize + 1] : [pageSize + 1];
+  const { results } = await query(db, `SELECT id, edited, url, published FROM submissions
+    WHERE test = 0 AND state = 'published' AND published IS NOT NULL ${where}
+    ORDER BY published DESC, id DESC LIMIT ?`, ...params).all();
+  const page = results.slice(0, pageSize);
+  const last = page.at(-1);
+  return [200, {
+    updates: page.map(({ edited, url, published }) => {
+      const { title, section, description } = editedFields({ ...JSON.parse(edited), tags: [] });
+      return { title, section, description, url, published };
+    }),
+    next: results.length > pageSize ? `${last.published}:${last.id}` : null,
+  }];
 }
 
 async function handle(request, env) {
@@ -132,17 +145,8 @@ async function handle(request, env) {
   if (!ip || !(await env.EDGE_LIMIT.limit({ key: ip })).success) {
     return error(429, '访问过于频繁，请稍后再试。');
   }
-  if (request.method === 'GET' && path === '/results') {
-    const { results } = await query(env.DB, `SELECT id, state, edited, public_reason FROM submissions
-      WHERE test = 0 AND state IN ('published', 'rejected')
-      ORDER BY decided DESC LIMIT 60`).all();
-    return [200, { decisions: results.map(publicStatus) }];
-  }
-  const receipt = /^\/status\/([^/]+)$/.exec(path)?.[1];
-  if (request.method === 'GET' && receiptPattern.test(receipt)) {
-    const row = await query(env.DB, `SELECT id, state, edited, public_reason FROM submissions
-      WHERE id = ? AND test = 0`, receipt).first();
-    return row ? [200, publicStatus(row)] : error(404, '未找到此编号，请核对后重试。');
+  if (request.method === 'GET' && path === '/updates') {
+    return publishedUpdates(env.DB, request);
   }
   if (request.method !== 'POST' || path !== '/submit') {
     return error(404, '页面不存在。');

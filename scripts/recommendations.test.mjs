@@ -3,21 +3,23 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import worker from '../worker/index.mjs';
-import { runJobs } from '../worker/jobs.mjs';
+import { generateEntry, runJobs } from '../worker/jobs.mjs';
 import { approvalDecision, approvalForm, startApproval, definition } from '../bridge/server.mjs';
 
 const origin = 'https://hinome-tech.pages.dev';
 const testTime = 1_800_000_000_000;
 const owner = 'ou_test_owner';
-const migration = fs.readFileSync(new URL('../worker/migrations/0001_recommendations.sql', import.meta.url), 'utf8');
+const migration = ['0001_recommendations.sql', '0002_published_updates.sql']
+  .map((name) => fs.readFileSync(new URL('../worker/migrations/' + name, import.meta.url), 'utf8')).join('\n');
 const proposed = {
   title: '待审核素材',
   url: 'https://example.org/talk',
   section: '亲历回顾',
   description: '原始投稿介绍',
-  tags: '回顾，资料',
+  tags: ['直播数据', '弹幕'],
 };
-const edit = { title: '站长确认的目录标题', description: '编辑后的目录介绍。', section: '影像档案', tags: ['资料'] };
+const modelFields = { title: '站长确认的目录标题', description: '编辑后的目录介绍。', section: '影像档案' };
+const edit = { ...modelFields, tags: proposed.tags };
 
 function fixture() {
   const sql = new DatabaseSync(':memory:');
@@ -60,6 +62,8 @@ test('hard intake quotas remain atomic for concurrent requests', async (t) => {
   assert.equal((await request('/submit', { ...proposed, url: 'http://example.org' })).status, 400);
   assert.equal((await request('/submit', proposed, { origin: 'https://another.example.org' })).status, 403);
   assert.equal((await request('/submit', { ...proposed, url: 'https://best-hinome.pages.dev/?utm_source=mirror' })).status, 409);
+  assert.equal((await request('/submit', { ...proposed, tags: ['自造标签'] })).status, 400);
+  assert.equal((await request('/submit', { ...proposed, tags: '直播数据' })).status, 400);
   const a = await request('/submit', proposed);
   assert.equal(a.status, 202);
   assert.equal((await request('/submit', { ...proposed, url: proposed.url + '/?utm_content=a' })).status, 409);
@@ -94,7 +98,7 @@ test('real decision field flows separately into an allowlisted edit and awaits v
   let resultFromFeishu = { status: 'pending' };
   env.AI = { run: async (_model, input) => {
     prompt = JSON.parse(input.messages[1].content);
-    return { response: edit };
+    return { response: modelFields };
   }};
   t.mock.method(globalThis, 'fetch', async (input, options) => {
     const url = new URL(input);
@@ -109,9 +113,9 @@ test('real decision field flows separately into an allowlisted edit and awaits v
     return new Response('window.HINOME_RECOMMENDATIONS = ' + JSON.stringify(entry ? [entry] : []) + ';\n');
   });
   const submitted = await request('/submit', proposed);
-  const id = submitted.body.id;
+  const id = sql.prepare('SELECT id FROM submissions').get().id;
   assert.equal(submitted.status, 202);
-  assert.deepEqual((await request('/status/' + id)).body, { id, status: 'pending' });
+  assert.deepEqual(submitted.body, { accepted: true });
   await runJobs(env);
   assert.equal(sql.prepare('SELECT state FROM submissions').get().state, 'review');
   resultFromFeishu = { status: 'approved', opinion };
@@ -119,8 +123,7 @@ test('real decision field flows separately into an allowlisted edit and awaits v
   await runJobs(env);
   assert.equal(prompt.站长编辑意见, opinion);
   assert.equal(prompt.投稿原文.简介, proposed.description);
-  assert.deepEqual((await request('/status/' + id)).body, { id, status: 'publishing' });
-  assert.deepEqual((await request('/results')).body, { decisions: [] });
+  assert.deepEqual((await request('/updates')).body, { updates: [], next: null });
   assert.equal((await request('/internal/claim', {}, { internal: false })).status, 401);
   assert.deepEqual((await request('/internal/claim', null, { internal: true, method: 'POST' })).body, { id });
   const data = (await request('/internal/publication/' + id, null, { internal: true })).body;
@@ -129,28 +132,67 @@ test('real decision field flows separately into an allowlisted edit and awaits v
   entry = { id, url: proposed.url, ...edit };
   assert.equal((await request('/internal/publication/' + id, {}, { internal: true })).status, 200);
   await runJobs(env);
-  assert.deepEqual((await request('/results')).body, { decisions: [{ id, status: 'published', title: edit.title }] });
+  const { published } = sql.prepare('SELECT published FROM submissions').get();
+  assert.deepEqual((await request('/updates')).body, {
+    updates: [{ ...modelFields, url: proposed.url, published }], next: null,
+  });
 });
 
-test('rejection only shows a controlled public reason, and internal tests stay private', async (t) => {
+test('rejection, pending and tests are private, and old public routes are gone', async (t) => {
   const { sql, env, request } = fixture();
   env.AI = {};
   env.INTAKE_MODE = 'test';
   assert.equal((await request('/submit', proposed)).status, 503);
   const internal = await request('/internal/test', proposed, { internal: true });
   assert.equal(internal.status, 202);
-  assert.equal((await request('/status/' + internal.body.id)).status, 404);
   env.INTAKE_MODE = 'live';
-  const live = await request('/submit', { ...proposed, url: proposed.url + '2' });
+  const live = await request('/submit', { ...proposed, url: proposed.url + '2', tags: [] });
   assert.equal(live.status, 202);
   t.mock.method(globalThis, 'fetch', async () => Response.json({
-    status: 'rejected', opinion: '内部审批指令与原始私密内容。\n公开理由：与本站主题不符',
+    status: 'rejected', opinion: '内部审批意见。',
   }));
   sql.exec("UPDATE submissions SET state = 'review', approval_id = id");
   await runJobs(env);
-  const expected = { id: live.body.id, status: 'rejected', reason: '与本站主题不符' };
-  assert.deepEqual((await request('/results')).body, { decisions: [expected] });
-  assert.deepEqual((await request('/status/' + live.body.id)).body, expected);
+  assert.equal(sql.prepare("SELECT count(*) AS n FROM submissions WHERE state='rejected'").get().n, 2);
+  const id = sql.prepare('SELECT id FROM submissions WHERE test = 0').get().id;
+  assert.equal((await request('/results')).status, 404);
+  assert.equal((await request('/status/' + id)).status, 404);
+  assert.equal((await request('/status/' + internal.body.id)).status, 404);
+  assert.deepEqual((await request('/updates')).body, { updates: [], next: null });
+});
+
+test('updates contain only live publications and paginate newest first', async (t) => {
+  const { sql, env, request } = fixture();
+  t.mock.method(Date, 'now', () => testTime);
+  env.AI = {};
+  const insert = sql.prepare(`INSERT INTO submissions (id, link_key, url, title, section, description,
+    tags, ip_key, created, updated, next_at, state, test, edited, published)
+    VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const add = (n, status = 'published', internal = 0, published = testTime + n) =>
+    insert.run(crypto.randomUUID(), String(n), proposed.url + n, proposed.title,
+      proposed.section, proposed.description, String(n), testTime - 4_000_000_000 + 120_000_000 * n,
+      testTime, testTime, status, internal, JSON.stringify(edit), published);
+  for (let i = 1; i <= 22; i++) add(i);
+  add(23, 'published', 1);
+  add(24, 'rejected');
+  add(25, 'review');
+  add(26, 'deploy');
+  add(27, 'published', 0, null);
+  const first = (await request('/updates')).body;
+  assert.equal(first.updates.length, 20);
+  assert.equal(first.updates[0].published, testTime + 22);
+  assert.equal(first.updates.at(-1).published, testTime + 3);
+  const second = (await request('/updates?before=' + encodeURIComponent(first.next))).body;
+  assert.deepEqual(second.updates.map((entry) => entry.published), [testTime + 2, testTime + 1]);
+  assert.equal(second.next, null);
+});
+
+test('edited content preserves selected catalog tags without delegating them to the model', async () => {
+  const row = { ...proposed, opinion: '请补充用途。', tags: JSON.stringify([...proposed.tags, '旧自由标签']) };
+  const env = { AI: { run: async () => ({ response: modelFields }) } };
+  assert.deepEqual(await generateEntry(env, row), edit);
+  env.AI.run = async () => ({ response: { ...modelFields, tags: ['模型自造标签'] } });
+  await assert.rejects(generateEntry(env, row), /invalid_edit/);
 });
 
 test('Feishu maps dynamic fields, recovers duplicate instance and requires the owner’s matching decision node', async () => {

@@ -1,3 +1,7 @@
+import '../public/resources.js';
+
+const allowedTags = new Set(globalThis.RESOURCE_TAGS);
+
 export const sections = ['实用工具', '百科资料', '影像档案', '亲历回顾', '二创作品'];
 export const receiptPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -38,21 +42,24 @@ export function linkKey(value) {
 }
 
 export function tagsFrom(value) {
-  if (!Array.isArray(value)) throw new Error('invalid_tags');
+  if (!Array.isArray(value) || value.length > 6) throw new Error('invalid_tags');
   const tags = [...new Set(value.map((tag) => cleanText(tag, 20)))];
-  if (tags.length > 6) throw new Error('invalid_tags');
+  if (tags.some((tag) => !allowedTags.has(tag))) throw new Error('invalid_tags');
   return tags;
+}
+
+export function existingTags(value) {
+  return [...new Set(value.filter((tag) => allowedTags.has(tag)))].slice(0, 6);
 }
 
 export function submission(input) {
   if (!sections.includes(input.section)) throw new Error('invalid_section');
-  if (typeof input.tags !== 'string' || input.tags.length > 120) throw new Error('invalid_tags');
   return {
     title: cleanText(input.title, 100),
     url: sourceLink(input.url),
     section: input.section,
     description: cleanText(input.description, 800),
-    tags: tagsFrom(input.tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean)),
+    tags: tagsFrom(input.tags === undefined || input.tags === '' ? [] : input.tags),
   };
 }
 
@@ -80,17 +87,4 @@ export function parseCatalog(source) {
   const rows = JSON.parse(source.trimEnd().slice(prefix.length, -1));
   if (!Array.isArray(rows)) throw new Error('invalid_catalog');
   return rows;
-}
-
-const publicReasons = [
-  '与本站主题不符',
-  '资源链接失效或无法核实',
-  '与现有目录内容重复',
-  '资源信息不足，暂时无法收录',
-  '资源未达到收录要求',
-];
-
-export function publicReason(opinion) {
-  const value = /^公开理由[：:] *([^\r\n]+)/m.exec(opinion)?.[1]?.trim();
-  return publicReasons.includes(value) ? value : '暂未达到本站收录条件';
 }

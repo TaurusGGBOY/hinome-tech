@@ -147,3 +147,7 @@ globalThis.RESOURCE_GROUPS = [
     ],
   },
 ];
+
+globalThis.RESOURCE_TAGS = [...new Set(globalThis.RESOURCE_GROUPS.flatMap(({ items }) =>
+  items.flatMap(({ tags }) => tags),
+))].sort((left, right) => left.localeCompare(right, 'zh-CN'));
