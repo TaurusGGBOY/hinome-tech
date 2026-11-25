@@ -528,6 +528,24 @@ footer {
 }
 .recommend-submit:disabled { opacity: .55; cursor: default; }
 #recommend-status { min-height: 1.4em; }
+#recommend-notice {
+  position: fixed;
+  z-index: 2;
+  inset: auto 0 max(1.25rem, env(safe-area-inset-bottom));
+  width: fit-content;
+  max-width: calc(100% - 2rem);
+  margin: 0 auto;
+  text-align: center;
+  pointer-events: none;
+}
+#recommend-notice:not(:empty) {
+  padding: .55rem 1rem;
+  border: 1px solid #edf3ff49;
+  border-radius: .75rem;
+  background: #14243c;
+  color: var(--text);
+  box-shadow: 0 4px 18px #07122470;
+}
 .tag-picker { margin-bottom: .9rem; }
 .tag-picker summary { color: var(--resource-title); cursor: pointer; }
 .tag-options {

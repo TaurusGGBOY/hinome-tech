@@ -33,12 +33,14 @@
   const dialog = document.querySelector('#recommend');
   const form = document.querySelector('#recommend-form');
   const status = document.querySelector('#recommend-status');
+  const notice = document.querySelector('#recommend-notice');
   const send = form.querySelector('button[type=submit]');
   const picker = form.querySelector('.tag-picker');
   const tagOptions = picker.querySelector('.tag-options');
   const tagCount = picker.querySelector('.tag-count');
   let connecting = false;
   let sending = false;
+  let noticeTimer;
 
   for (const { title } of window.RESOURCE_GROUPS) {
     form.elements.section.add(new Option(title, title));
@@ -62,7 +64,9 @@
   tagOptions.addEventListener('change', updateTags);
 
   onOpen(dialog, async () => {
-    if (connecting || !send.disabled) return;
+    clearTimeout(noticeTimer);
+    notice.textContent = '';
+    if (connecting || sending || !send.disabled) return;
     connecting = true;
     status.textContent = '正在连接投稿服务…';
     try {
@@ -94,7 +98,13 @@
       form.reset();
       picker.open = false;
       updateTags();
-      status.textContent = '推荐已收到，感谢补充。';
+      status.textContent = '';
+      dialog.close();
+      if (location.hash === '#recommend') {
+        history.replaceState(history.state, '', location.pathname + location.search);
+      }
+      notice.textContent = '推荐已收到，感谢补充。';
+      noticeTimer = setTimeout(() => { notice.textContent = ''; }, 4_000);
     } catch (error) {
       status.textContent = ['TypeError', 'TimeoutError'].includes(error.name) ? '连接失败，请重试。' : error.message;
     } finally {

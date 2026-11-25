@@ -201,7 +201,15 @@ async function main() {
       await recommendation.getByText('选择已有标签（选填）', { exact: true }).click();
       await recommendation.getByRole('checkbox', { name: '直播数据', exact: true }).check();
       await recommendation.getByRole('button', { name: '提交推荐', exact: true }).click();
-      await recommendation.getByText('推荐已收到，感谢补充。', { exact: true }).waitFor();
+      const notice = page.getByRole('status').filter({ hasText: '推荐已收到，感谢补充。' });
+      await notice.waitFor();
+      assert.equal(await recommendation.count(), 0);
+      assert.equal(page.url(), homeUrl);
+      await page.waitForFunction(() => document.activeElement?.matches('footer [data-dialog="recommend"]'));
+      await entry.click();
+      assert.equal(await recommendation.getByLabel('资源名称').inputValue(), '');
+      assert.equal(await recommendation.locator('input[name=tags]:checked').count(), 0);
+      assert.equal(await notice.count(), 0);
       await recommendation.getByRole('button', { name: '关闭提交推荐' }).click();
       assert(await entry.evaluate((el) => el === document.activeElement));
       const updateEntry = footer.getByRole('button', { name: '更新记录', exact: true });
