@@ -315,7 +315,7 @@ test('Bilibili video editing receives actual storyboard images for the requested
     AI: { run: async (model, input) => {
       assert.match(model, /llama-4-scout/);
       const [text, frames] = input.messages[1].content;
-      assert.equal(JSON.parse(text.text).资源内容.title, '来源分段');
+      assert.equal(JSON.parse(text.text).来源标题, '来源分段');
       assert.match(frames.image_url.url, /^data:image\/jpeg;base64,/);
       assert(!text.text.includes(proposed.description));
       return { response: modelFields };

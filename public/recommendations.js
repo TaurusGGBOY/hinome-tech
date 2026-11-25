@@ -12,7 +12,7 @@ window.HINOME_RECOMMENDATIONS = [
     "url": "https://www.bilibili.com/video/BV1TvyZz6ERq",
     "title": "关于坠入火羽这件事",
     "section": "二创作品",
-    "description": "一支火羽故事 MV，串起校园回忆、深夜看直播与万舰庆典。",
+    "description": "火羽故事 MV，串起校园、深夜直播与万舰庆典。",
     "tags": []
   }
 ];
