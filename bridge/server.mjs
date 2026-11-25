@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { cardCallback, handleCardAction, sendReviewCard } from './feishu-cards.mjs';
+import { bilibiliSource } from './bilibili.mjs';
 
 const {
   BRIDGE_TOKEN, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_OWNER_OPEN_ID, PORT = 8080,
@@ -196,6 +197,13 @@ export const server = http.createServer(async (request, response) => {
   if (request.url === '/health' && request.method === 'GET') return reply(response, 200, { alive: true });
   if (request.url === '/feishu/card-callback' && request.method === 'POST') return receiveCard(request, response);
   if (!sameSecret(request.headers.authorization)) return reply(response, 401, { error: 'Unauthorized' });
+  if (request.method === 'POST' && request.url === '/sources/bilibili') {
+    try {
+      return reply(response, 200, await bilibiliSource(await bodyFrom(request)));
+    } catch {
+      return reply(response, 503, { error: 'Bilibili source unavailable' });
+    }
+  }
   try {
     if (request.method === 'POST' && request.url === '/cards') {
       if (![FEISHU_CALLBACK_ENCRYPT_KEY, FEISHU_CALLBACK_VERIFICATION_TOKEN, CARD_WORKER_URL, CARD_WORKER_TOKEN].every(Boolean)) {

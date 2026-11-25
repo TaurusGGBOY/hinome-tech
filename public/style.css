@@ -293,7 +293,11 @@ button:focus-visible {
   transition: color 0.18s;
 }
 .description {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--description);
   font-size: 15px;
   line-height: 1.55;

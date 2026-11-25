@@ -11,6 +11,7 @@ import worker from '../worker/index.mjs';
 import { generateEntry, runJobs } from '../worker/jobs.mjs';
 import { approvalDecision, approvalForm, startApproval, definition } from '../bridge/server.mjs';
 import { cardCallback, handleCardAction, reviewCard, sendReviewCard } from '../bridge/feishu-cards.mjs';
+import { bilibiliSource } from '../bridge/bilibili.mjs';
 
 const origin = 'https://hinome-tech.pages.dev';
 const testTime = 1_800_000_000_000;
@@ -26,6 +27,7 @@ const proposed = {
 };
 const modelFields = { title: '站长确认的目录标题', description: '编辑后的目录介绍。', section: '影像档案' };
 const edit = { ...modelFields, tags: proposed.tags };
+const sourceText = '这份回顾整理了活动的筹备经过、现场流程和三位观众的采访。正文依次介绍了节目单、现场布置和演出结束后的观众交流，并附有活动照片及对应时间。末尾补充了参与者对节目编排的印象。';
 
 test('automatic collection adds a single version and resource, including on retry', (t) => {
   const directory = fs.mkdtempSync(join(tmpdir(), 'hinome-tech-release-'));
@@ -147,6 +149,7 @@ test('real decision field flows separately into an allowlisted edit and awaits v
       return Response.json({ instance: '096ba37a-0936-4c6a-8213-5b1d4e9b8001' });
     }
     if (url.host === 'approval.example.org') return Response.json(resultFromFeishu);
+    if (url.href === proposed.url) return new Response(sourceText);
     assert.equal(url.origin, origin);
     return new Response('window.HINOME_RECOMMENDATIONS = ' + JSON.stringify(entry ? [entry] : []) + ';\n');
   });
@@ -160,7 +163,8 @@ test('real decision field flows separately into an allowlisted edit and awaits v
   sql.exec('UPDATE submissions SET next_at = 0');
   await runJobs(env);
   assert.equal(prompt.站长编辑意见, opinion);
-  assert.equal(prompt.投稿原文.简介, proposed.description);
+  assert.equal(prompt.资源内容.text, sourceText);
+  assert(!JSON.stringify(prompt).includes(proposed.description));
   assert.deepEqual((await request('/updates')).body, { updates: [], next: null });
   assert.equal((await request('/internal/claim', {}, { internal: false })).status, 401);
   assert.deepEqual((await request('/internal/claim', null, { internal: true, method: 'POST' })).body, { id });
@@ -186,10 +190,11 @@ test('the scheduled retry recovers an already-approved submission without an opi
   let attempts = 0;
   env.AI = { run: async (_model, input) => {
     editorialInput = JSON.parse(input.messages[1].content);
-    assert.match(input.messages[0].content, /没有填写编辑意见时，依据投稿原文/);
+    assert.match(input.messages[0].content, /事实须有资源内容支持/);
     return { response: modelFields };
   }};
   t.mock.method(globalThis, 'fetch', async (input, options) => {
+    if (String(input) === proposed.url) return new Response(sourceText);
     if (options.method === 'POST') return Response.json({ instance: approvalId });
     assert.equal(new URL(input).pathname, '/approvals/' + approvalId);
     attempts++;
@@ -214,7 +219,7 @@ test('the scheduled retry recovers an already-approved submission without an opi
   assert.equal(row().opinion, '');
   assert.equal(row().last_error, null);
   assert.equal(Object.hasOwn(editorialInput, '站长编辑意见'), false);
-  assert.equal(editorialInput.投稿原文.简介, proposed.description);
+  assert.equal(editorialInput.资源内容.text, sourceText);
 });
 
 test('rejection, pending and tests are private, and old public routes are gone', async (t) => {
@@ -269,12 +274,66 @@ test('updates contain only live publications and paginate newest first', async (
   assert.equal(second.next, null);
 });
 
-test('edited content preserves selected catalog tags without delegating them to the model', async () => {
+test('edited content preserves selected tags and validates a short description', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(sourceText));
   const row = { ...proposed, opinion: '请补充用途。', tags: JSON.stringify([...proposed.tags, '旧自由标签']) };
   const env = { AI: { run: async () => ({ response: modelFields }) } };
   assert.deepEqual(await generateEntry(env, row), edit);
   env.AI.run = async () => ({ response: { ...modelFields, tags: ['模型自造标签'] } });
   await assert.rejects(generateEntry(env, row), /invalid_edit/);
+  env.AI.run = async () => ({ response: { ...modelFields, description: '第一句。第二句。第三句。' } });
+  await assert.rejects(generateEntry(env, row), /brief_invalid/);
+  env.AI.run = async () => ({ response: { ...modelFields, description: '演出记录'.repeat(12) } });
+  await assert.rejects(generateEntry(env, row), /brief_invalid/);
+});
+
+test('an unverified source stays in editing without a model call', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 403 }));
+  const { env, request, sql } = fixture();
+  env.AI = { run: async () => assert.fail('No generation without source evidence') };
+  assert.equal((await request('/submit', proposed)).status, 202);
+  sql.exec("UPDATE submissions SET state = 'edit', next_at = 0");
+  await runJobs(env);
+  const row = sql.prepare('SELECT state, edited, last_error FROM submissions').get();
+  assert.equal(row.state, 'edit');
+  assert.equal(row.edited, null);
+  assert.equal(row.last_error, 'retry_edit:source_unavailable');
+});
+
+test('Bilibili video editing receives actual storyboard images for the requested part', async (t) => {
+  const env = {
+    FEISHU_BRIDGE_URL: 'https://approval.example.org',
+    FEISHU_BRIDGE_TOKEN: 'fixture',
+    AI: { run: async (model, input) => {
+      assert.match(model, /llama-4-scout/);
+      const [text, frames] = input.messages[1].content;
+      assert.equal(JSON.parse(text.text).资源内容.title, '来源分段');
+      assert.match(frames.image_url.url, /^data:image\/jpeg;base64,/);
+      assert(!text.text.includes(proposed.description));
+      return { response: modelFields };
+    } },
+  };
+  t.mock.method(globalThis, 'fetch', async (input, options) => {
+    const url = new URL(input);
+    if (url.href === env.FEISHU_BRIDGE_URL + '/sources/bilibili') {
+      assert.equal(options.headers.Authorization, 'Bearer fixture');
+      assert.equal(options.redirect, 'manual');
+      return Response.json(await bilibiliSource(JSON.parse(options.body)));
+    }
+    if (url.pathname === '/x/web-interface/view') return Response.json({
+      code: 0, data: { pages: [{ page: 1, cid: 98 }, { page: 2, cid: 99, part: '来源分段' }] },
+    });
+    if (url.pathname === '/x/player/videoshot') {
+      assert.equal(url.searchParams.get('cid'), '99');
+      return Response.json({ code: 0, data: { image: ['//bimp.hdslb.com/videoshot/99-1.jpg'], index: [0, 10] } });
+    }
+    if (url.pathname === '/x/player/wbi/v2') return Response.json({ code: 0, data: {} });
+    assert.equal(url.href, 'https://bimp.hdslb.com/videoshot/99-1.jpg@1600w.jpg');
+    assert.equal(Object.hasOwn(options.headers, 'Authorization'), false);
+    return new Response(new Uint8Array([255, 216, 255, 217]), { headers: { 'Content-Type': 'image/jpeg' } });
+  });
+  const url = 'https://www.bilibili.com/video/BV1TvyZz6ERq?p=2';
+  assert.deepEqual(await generateEntry(env, { ...proposed, url, tags: JSON.stringify(proposed.tags) }), edit);
 });
 
 test('Feishu maps dynamic fields and recovers a duplicate instance', async () => {
@@ -428,6 +487,7 @@ test('card-backed submissions issue no native task, and signed actions are uniqu
   const deliveries = new Map();
   const messageId = (n) => 'om_fixture_' + n;
   t.mock.method(globalThis, 'fetch', async (input, options) => {
+    if (new URL(input).host === 'example.org') return new Response(sourceText);
     assert.equal(new URL(input).pathname, '/cards');
     const delivery = JSON.parse(options.body);
     cardsSent++;
@@ -487,6 +547,7 @@ test('a lost card delivery acknowledgement can recover from the signed click wit
   let delivery;
   let sends = 0;
   t.mock.method(globalThis, 'fetch', async (input, options) => {
+    if (String(input) === proposed.url) return new Response(sourceText);
     assert.equal(new URL(input).pathname, '/cards');
     sends++;
     delivery = JSON.parse(options.body);

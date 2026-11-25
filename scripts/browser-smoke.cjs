@@ -130,6 +130,16 @@ async function main() {
         tag: 'rgb(183, 216, 242)',
         section: 'rgb(255, 172, 156)',
       });
+      const descriptionLines = await page.locator('.card .description').first().evaluate((description) => {
+        const original = description.textContent;
+        description.textContent = '用于检查卡片简介只显示两行。'.repeat(40);
+        const lineHeight = parseFloat(getComputedStyle(description).lineHeight);
+        const visibleLines = description.clientHeight / lineHeight;
+        const clipped = description.scrollHeight > description.clientHeight;
+        description.textContent = original;
+        return { visibleLines, clipped };
+      });
+      assert(Math.abs(descriptionLines.visibleLines - 2) < 0.1 && descriptionLines.clipped);
       const tagGaps = await page.locator('.card').evaluateAll((cards) =>
         cards.map((card) =>
           card.getBoundingClientRect().bottom - card.querySelector('.tags').getBoundingClientRect().bottom,
