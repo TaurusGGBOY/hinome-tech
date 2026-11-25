@@ -502,6 +502,7 @@ footer {
   .footer-extra::before { content: none; }
 }
 .footer-links .about-trigger { font: inherit; }
+.site-version { margin-inline-start: .25em; font-size: .9em; }
 .recommend-dialog [hidden] { display: none; }
 .recommend-dialog fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
 .recommend-dialog label { display: grid; gap: .35rem; margin-bottom: .8rem; color: var(--resource-title); }
@@ -565,10 +566,11 @@ footer {
 }
 .tag-options input { accent-color: #ffd4a6; }
 .tag-count { font-size: .9rem; margin: .2rem 0 .45rem; }
+.updates-dialog[open] { display: flex; flex-direction: column; }
 .updates-dialog article { border-top: 1px solid #b7d8f24d; padding: .8rem 0; }
 .updates-dialog article small { color: var(--section-title); }
 .updates-dialog article h3 { margin: .35rem 0; font-size: 1.05rem; }
-.updates-dialog article p { margin: .25rem 0 0; }
+.updates-dialog ul { margin: .3rem 0 0; padding-inline-start: 1.2rem; }
+.updates-dialog li + li { margin-top: .25rem; }
 #updates-status:empty { display: none; }
-#updates-list { margin-top: .65rem; }
-#updates-more { margin-top: .5rem; }
+#updates-list { margin-top: .65rem; padding-inline-end: .35rem; overflow-y: auto; }

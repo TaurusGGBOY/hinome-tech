@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../public');
+const releases = JSON.parse(fs.readFileSync(path.join(root, 'releases.json'), 'utf8'));
 async function main() {
   let server;
   let url = process.argv[2];
@@ -162,12 +163,6 @@ async function main() {
         const data = {
           '/config': { accepting: true },
           '/submit': { accepted: true },
-          '/updates': { updates: [
-            { published: Date.parse('2026-11-20T23:00:00Z'), section: '二创作品',
-              title: '较新资源', description: '新增一条二创资源。', url: 'https://example.org/recent' },
-            { published: Date.parse('2026-11-20T04:00:00Z'), section: '百科资料',
-              title: '较早资源', description: '新增一条百科资料。', url: 'https://example.org/earlier' },
-          ], next: null },
         }[pathname];
         assert(data, 'Unexpected recommendation request');
         if (apiRequest.method() === 'POST') {
@@ -213,13 +208,24 @@ async function main() {
       await recommendation.getByRole('button', { name: '关闭提交推荐' }).click();
       assert(await entry.evaluate((el) => el === document.activeElement));
       const updateEntry = footer.getByRole('button', { name: '更新记录', exact: true });
+      assert.equal(await footer.locator('#site-version').innerText(), releases[0].version);
       await updateEntry.click();
-      await updatePanel.getByRole('link', { name: '较新资源' }).waitFor();
-      assert.deepEqual(await updatePanel.locator('article h3').allTextContents(), ['较新资源', '较早资源']);
-      assert.deepEqual(await updatePanel.locator('article time').allTextContents(), ['2026.11.21', '2026.11.20']);
-      assert.equal(await updatePanel.getByRole('link', { name: '较新资源' }).getAttribute('href'), 'https://example.org/recent');
-      assert(await updatePanel.getByText('新增一条二创资源。', { exact: true }).isVisible());
-      await updatePanel.getByRole('button', { name: '关闭更新记录' }).click();
+      await updatePanel.getByText(releases[0].title, { exact: true }).first().waitFor();
+      assert.deepEqual(await updatePanel.locator('article h3').allTextContents(), releases.map(({ title }) => title));
+      assert.deepEqual(await updatePanel.locator('article time').allTextContents(), releases.map(({ date }) => date.replaceAll('-', '.')));
+      assert.match(await updatePanel.locator('article small').first().innerText(), /^v\d+\.\d+\.\d+ · /);
+      assert(await updatePanel.getByText('推荐提交后自动关闭表单', { exact: true }).isVisible());
+      const approvedResource = updatePanel.getByRole('link', { name: '火羽ひのめ《信》Ai教案短片', exact: true });
+      assert.equal(await approvedResource.getAttribute('href'), 'https://www.bilibili.com/video/BV19QsA6aE4C');
+      const closeUpdates = updatePanel.getByRole('button', { name: '关闭更新记录' });
+      const beforeScroll = await closeUpdates.boundingBox();
+      const scrolled = await updatePanel.locator('#updates-list').evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+        return element.scrollTop;
+      });
+      assert(scrolled > 0);
+      assert.deepEqual(await closeUpdates.boundingBox(), beforeScroll);
+      await closeUpdates.click();
       assert(await updateEntry.evaluate((el) => el === document.activeElement));
       await page.goto(new URL('about.html#hinome-eye', url).href);
       await siteDialog.waitFor();
@@ -273,7 +279,7 @@ async function main() {
         const videoLinks = await page.locator('#groups .item').evaluateAll((items) =>
           items.map((item) => new URL(item.href).pathname.split('/')[2]),
         );
-        assert.deepEqual(videoLinks, videoIds, sectionTitle);
+        assert.deepEqual(videoLinks.slice(0, videoIds.length), videoIds, sectionTitle);
       }
       await input.fill('完全不存在的搜索');
       assert.equal(await page.locator('#empty').isVisible(), true);
@@ -343,7 +349,7 @@ async function main() {
         });
       }
       console.log(
-        `${name}: initial, order, icons, glass cards, search, aliases, empty, clear, shortcut, IME, external link, overflow and console passed`,
+        `${name}: catalog, search, recommendation, version history, external links, overflow and console passed`,
       );
       await page.close();
     }

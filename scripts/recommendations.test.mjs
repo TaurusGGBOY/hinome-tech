@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import test from 'node:test';
@@ -22,6 +26,37 @@ const proposed = {
 };
 const modelFields = { title: '站长确认的目录标题', description: '编辑后的目录介绍。', section: '影像档案' };
 const edit = { ...modelFields, tags: proposed.tags };
+
+test('automatic collection adds a single version and resource, including on retry', (t) => {
+  const directory = fs.mkdtempSync(join(tmpdir(), 'hinome-tech-release-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.mkdirSync(join(directory, 'public'));
+  for (const file of ['recommendations.js', 'resources.js', 'releases.json']) {
+    fs.copyFileSync(new URL('../public/' + file, import.meta.url), join(directory, 'public', file));
+  }
+  const notes = join(directory, 'public/releases.json');
+  const originalReleases = JSON.parse(fs.readFileSync(notes, 'utf8'));
+  const packet = join(directory, 'packet.json');
+  fs.writeFileSync(packet, JSON.stringify({
+    id: '223e4567-e89b-42d3-a456-556642440000', state: 'publish', url: proposed.url, ...edit,
+  }));
+  const updater = fileURLToPath(new URL('./update-recommendation.mjs', import.meta.url));
+  const update = () => execFileSync(process.execPath, [updater, packet], { cwd: directory, encoding: 'utf8' }).trim();
+  const version = update();
+  const [major, minor, patch] = originalReleases[0].version.split('.');
+  assert.equal(version, `${major}.${minor}.${Number(patch) + 1}`);
+  const added = JSON.parse(fs.readFileSync(notes, 'utf8'));
+  assert.equal(added[0].version, version);
+  assert.match(added[0].date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.deepEqual(added[0].resources, [{ url: proposed.url, ...modelFields }]);
+  assert.deepEqual(added.slice(1), originalReleases);
+  const catalog = join(directory, 'public/recommendations.js');
+  const published = fs.readFileSync(catalog, 'utf8');
+  assert(published.includes(proposed.url));
+  assert.equal(update(), version);
+  assert.deepEqual(JSON.parse(fs.readFileSync(notes, 'utf8')), added);
+  assert.equal(fs.readFileSync(catalog, 'utf8'), published);
+});
 
 function fixture() {
   const sql = new DatabaseSync(':memory:');

@@ -13,6 +13,7 @@
     <script src="catalog.js" defer></script>
     <script src="app.js" defer></script>
     <script src="recommend.js" defer></script>
+    <script src="updates.js" defer></script>
   </head>
   <body>
     <a class="skip" href="#catalog">跳至资源目录</a>
@@ -67,6 +68,7 @@
           </div>
           <div class="footer-extra">
             <button type="button" class="about-trigger" data-dialog="updates" aria-haspopup="dialog" aria-controls="updates">更新记录</button>
+            <span class="site-version" id="site-version" hidden></span>
           </div>
         </div>
       </footer>
@@ -100,8 +102,7 @@
         <form method="dialog"><button type="submit" aria-label="关闭更新记录" autofocus>×</button></form>
       </div>
       <p id="updates-status" role="status"></p>
-      <div id="updates-list"></div>
-      <button type="button" class="recommend-submit" id="updates-more" hidden>查看更多</button>
+      <div id="updates-list" tabindex="0" role="region" aria-label="版本历史"></div>
     </dialog>
     <dialog class="about-dialog" id="about-site" aria-labelledby="about-site-title">
       <div class="about-heading">
