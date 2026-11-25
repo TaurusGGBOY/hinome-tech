@@ -285,6 +285,14 @@ test('edited content preserves selected tags and validates a short description',
   await assert.rejects(generateEntry(env, row), /brief_invalid/);
   env.AI.run = async () => ({ response: { ...modelFields, description: '演出记录'.repeat(12) } });
   await assert.rejects(generateEntry(env, row), /brief_invalid/);
+  const long = '这份资料介绍演出筹备、现场流程和观众采访。正文附有节目单。最后收录了参与者的感受。';
+  env.AI.run = async (_model, input) => {
+    const context = JSON.parse(input.messages[1].content);
+    if (context.资源内容) return { response: { ...modelFields, description: long } };
+    assert.deepEqual(context, { description: long });
+    return { response: { description: '介绍演出筹备和现场流程，附观众采访与节目单。' } };
+  };
+  assert.equal((await generateEntry(env, row)).description, '介绍演出筹备和现场流程，附观众采访与节目单。');
 });
 
 test('an unverified source stays in editing without a model call', async (t) => {
