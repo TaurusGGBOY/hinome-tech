@@ -8,15 +8,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import test from 'node:test';
 import worker from '../worker/index.mjs';
-import { generateEntry, runJobs } from '../worker/jobs.mjs';
+import { formatProgressMessage, generateEntry, runJobs } from '../worker/jobs.mjs';
 import { approvalDecision, approvalForm, startApproval, definition } from '../bridge/server.mjs';
-import { cardCallback, handleCardAction, reviewCard, sendReviewCard } from '../bridge/feishu-cards.mjs';
+import { cardCallback, handleCardAction, reviewCard, sendProgressMessage, sendReviewCard } from '../bridge/feishu-cards.mjs';
 import { bilibiliSource } from '../bridge/bilibili.mjs';
 
 const origin = 'https://hinome-tech.pages.dev';
 const testTime = 1_800_000_000_000;
 const owner = 'ou_test_owner';
-const migration = ['0001_recommendations.sql', '0002_published_updates.sql', '0003_review_cards.sql']
+const migration = ['0001_recommendations.sql', '0002_published_updates.sql', '0003_review_cards.sql', '0004_progress_reports.sql']
   .map((name) => fs.readFileSync(new URL('../worker/migrations/' + name, import.meta.url), 'utf8')).join('\n');
 const proposed = {
   title: '待审核素材',
@@ -274,13 +274,26 @@ test('updates contain only live publications and paginate newest first', async (
   assert.equal(second.next, null);
 });
 
-test('edited content preserves selected tags and validates a short description', async (t) => {
+test('edited content preserves selected tags, supports pool and new tags, and validates a short description', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => new Response(sourceText));
   const row = { ...proposed, opinion: '请补充用途。', tags: JSON.stringify([...proposed.tags, '旧自由标签']) };
-  const env = { AI: { run: async () => ({ response: modelFields }) } };
+  let seenPrompt;
+  const env = { AI: { run: async (_model, input) => {
+    seenPrompt = JSON.parse(input.messages[1].content);
+    return { response: modelFields };
+  } } };
   assert.deepEqual(await generateEntry(env, row), edit);
-  env.AI.run = async () => ({ response: { ...modelFields, tags: ['模型自造标签'] } });
+  assert(Array.isArray(seenPrompt.现有标签池) && seenPrompt.现有标签池.includes('直播数据'));
+  env.AI.run = async () => ({ response: { ...modelFields, tags: ['直播数据', '公屏监测'] } });
+  assert.deepEqual(await generateEntry(env, row), { ...modelFields, tags: ['直播数据', '公屏监测'] });
+  env.AI.run = async () => ({ response: { ...modelFields, extra: 'bad' } });
   await assert.rejects(generateEntry(env, row), /invalid_edit/);
+  env.AI.run = async () => ({ response: { ...modelFields, tags: '直播数据' } });
+  await assert.rejects(generateEntry(env, row), /invalid_edit/);
+  env.AI.run = async () => ({ response: { ...modelFields, tags: ['https://example.org'] } });
+  await assert.rejects(generateEntry(env, row), /invalid_public_text/);
+  env.AI.run = async () => ({ response: { ...modelFields, tags: ['1', '2', '3', '4', '5', '6', '7'] } });
+  await assert.rejects(generateEntry(env, row), /invalid_tags/);
   env.AI.run = async () => ({ response: { ...modelFields, description: '第一句。第二句。第三句。' } });
   await assert.rejects(generateEntry(env, row), /brief_invalid/);
   env.AI.run = async () => ({ response: { ...modelFields, description: '演出记录'.repeat(12) } });
@@ -576,4 +589,161 @@ test('a lost card delivery acknowledgement can recover from the signed click wit
     state: 'publish', card_message_id: 'om_delivered_without_ack', approval_id: null, last_error: null,
   });
   assert.equal(sends, 1);
+});
+
+test('sendProgressMessage posts text to chat_id and validates inputs', async () => {
+  const id = crypto.randomUUID();
+  const key = crypto.randomUUID();
+  let calls = 0;
+  const sent = await sendProgressMessage(async (path, body) => {
+    calls++;
+    assert.equal(path, '/im/v1/messages?receive_id_type=chat_id');
+    assert.equal(body.receive_id, 'oc_test_channel_01');
+    assert.equal(body.msg_type, 'text');
+    assert.equal(body.uuid, key);
+    assert.deepEqual(JSON.parse(body.content), { text: '发布进度测试' });
+    return { message_id: 'om_progress_01' };
+  }, 'oc_test_channel_01', { id, key, text: '发布进度测试' });
+  assert.deepEqual(sent, { messageId: 'om_progress_01' });
+  assert.equal(calls, 1);
+
+  await assert.rejects(sendProgressMessage(async () => assert.fail(), 'bad_chat', { id, key, text: 'ok' }), /Invalid progress/);
+  await assert.rejects(sendProgressMessage(async () => assert.fail(), 'oc_test_channel_01', { id, key, text: '   ' }), /Invalid progress/);
+});
+
+test('empty placeholder video tag does not block readable webpage content', async (t) => {
+  const html = `<!doctype html><html><head><title>日の目结界</title></head><body><main>
+    <p>日の目结界是一个专注于维护主播直播间互动氛围的公屏监测与守护平台。</p>
+    <p>系统支持实时弹幕与醒目留言采集归档，并提供多维筛选与统计分析，帮助房管与热爱主播的观众更及时地发现异常节奏。</p>
+    <video id="replayVideoPlayer" controls playsinline preload="metadata"></video>
+  </main></body></html>`;
+  const prevRewriter = globalThis.HTMLRewriter;
+  const registeredSelectors = [];
+  t.after(() => { globalThis.HTMLRewriter = prevRewriter; });
+  globalThis.HTMLRewriter = class {
+    #handlers = [];
+    on(selector, handler) {
+      registeredSelectors.push(selector);
+      this.#handlers.push({ selector, handler });
+      return this;
+    }
+    transform(response) {
+      return {
+        text: async () => {
+          const body = await response.text();
+          for (const { selector, handler } of this.#handlers) {
+            if (selector.includes('video[src]') && handler.element) {
+              // Empty placeholder <video> has no src or <source src>, so it must not match.
+              assert.equal(/<video\b[^>]*\bsrc=|<source\b[^>]*\bsrc=/i.test(body), false);
+            }
+            if (selector.includes('article p') && handler.text) {
+              for (const match of body.matchAll(/<p[^>]*>(.*?)<\/p>/gs)) {
+                handler.text({ text: match[1], lastInTextNode: true });
+              }
+            }
+          }
+          return body;
+        },
+      };
+    }
+  };
+  t.mock.method(globalThis, 'fetch', async () => new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+  const env = { AI: { run: async () => ({ response: modelFields }) } };
+  assert.deepEqual(await generateEntry(env, { ...proposed, tags: '[]' }), { ...modelFields, tags: [] });
+  assert(registeredSelectors.some((selector) => selector.includes('video[src], video source[src]')));
+});
+
+test('post-approval progress reports every 5 minutes until published, skipping test and rejected items', async (t) => {
+  const { sql, env, request } = fixture();
+  env.APPROVAL_MODE = 'card';
+  env.PROGRESS_REPORTING = 'on';
+  let now = testTime;
+  t.mock.method(Date, 'now', () => now);
+  let sourceOk = false;
+  let livePublished = false;
+  const progressReports = [];
+  env.AI = { run: async () => ({ response: modelFields }) };
+  t.mock.method(globalThis, 'fetch', async (input, options) => {
+    const url = new URL(input);
+    if (url.href === env.FEISHU_BRIDGE_URL + '/cards') {
+      return Response.json({ messageId: 'om_card_' + JSON.parse(options.body).id.slice(0, 8) });
+    }
+    if (url.href === env.FEISHU_BRIDGE_URL + '/progress') {
+      const payload = JSON.parse(options.body);
+      progressReports.push(payload);
+      return Response.json({ messageId: 'om_prog_' + progressReports.length });
+    }
+    if (url.href === proposed.url) {
+      return sourceOk ? new Response(sourceText) : new Response(null, { status: 503 });
+    }
+    if (url.href === proposed.url + '/test' || url.href === proposed.url + '/rej') {
+      return new Response(sourceText);
+    }
+    assert.equal(url.origin, origin);
+    const live = livePublished ? [{ id: sql.prepare('SELECT id FROM submissions WHERE test=0 AND url=?').get(proposed.url).id, url: proposed.url, ...edit }] : [];
+    return new Response('window.HINOME_RECOMMENDATIONS = ' + JSON.stringify(live) + ';\n');
+  });
+
+  assert.equal((await request('/submit', proposed)).status, 202);
+  assert.equal((await request('/submit', { ...proposed, url: proposed.url + '/rej' })).status, 202);
+  env.INTAKE_MODE = 'test';
+  assert.equal((await request('/internal/test', { ...proposed, url: proposed.url + '/test' }, { internal: true })).status, 202);
+  env.INTAKE_MODE = 'live';
+
+  await runJobs(env);
+  assert.equal(progressReports.length, 0);
+
+  const liveId = sql.prepare('SELECT id FROM submissions WHERE test=0 AND url=?').get(proposed.url).id;
+  const rejId = sql.prepare('SELECT id FROM submissions WHERE test=0 AND url=?').get(proposed.url + '/rej').id;
+  const testId = sql.prepare('SELECT id FROM submissions WHERE test=1').get().id;
+  sql.prepare("UPDATE submissions SET state='edit', decided=?, updated=?, next_at=0 WHERE id IN (?, ?)").run(now, now, liveId, testId);
+  sql.prepare("UPDATE submissions SET state='rejected', decided=?, updated=? WHERE id=?").run(now, now, rejId);
+
+  // First tick: edit fails (source_unavailable), sends initial progress report for liveId only
+  await runJobs(env);
+  assert.equal(progressReports.length, 1);
+  assert.equal(progressReports[0].id, liveId);
+  assert.match(progressReports[0].text, /读取来源内容失败/);
+
+  // Within 4 minutes: should NOT send another report
+  now += 3 * 60_000;
+  await runJobs(env);
+  assert.equal(progressReports.length, 1);
+
+  // At +5 minutes: source now succeeds -> state becomes publish, sends report in publish state
+  now += 2 * 60_000;
+  sourceOk = true;
+  sql.prepare('UPDATE submissions SET next_at=0 WHERE id=?').run(liveId);
+  await runJobs(env);
+  assert.equal(progressReports.length, 2);
+  assert.match(progressReports[1].text, /等待 GitHub Actions 发布队列认领/);
+
+  // Another +5 minutes after claim: reports dispatched state
+  now += 5 * 60_000;
+  sql.prepare('UPDATE submissions SET publish_dispatch_at=? WHERE id=?').run(now - 60_000, liveId);
+  await runJobs(env);
+  assert.equal(progressReports.length, 3);
+  assert.match(progressReports[2].text, /已进入 GitHub Actions 发布队列/);
+
+  // Another +5 minutes in deploy state: reports deploy waiting confirmation
+  now += 5 * 60_000;
+  sql.prepare("UPDATE submissions SET state='deploy', next_at=? WHERE id=?").run(now + 60_000, liveId);
+  await runJobs(env);
+  assert.equal(progressReports.length, 4);
+  assert.match(progressReports[3].text, /等待公网目录回读确认/);
+
+  // Even 1 minute later, once live site is verified and state becomes published, completion report fires immediately
+  now += 60_000;
+  livePublished = true;
+  sql.prepare('UPDATE submissions SET next_at=0 WHERE id=?').run(liveId);
+  await runJobs(env);
+  assert.equal(progressReports.length, 5);
+  assert.match(progressReports[4].text, /发布完成/);
+  assert.equal(sql.prepare('SELECT progress_done FROM submissions WHERE id=?').get(liveId).progress_done, 1);
+
+  // Subsequent ticks send nothing
+  now += 10 * 60_000;
+  await runJobs(env);
+  assert.equal(progressReports.length, 5);
+  assert.equal(formatProgressMessage({ ...sql.prepare('SELECT * FROM submissions WHERE id=?').get(liveId) }, now).includes('发布完成'), true);
 });

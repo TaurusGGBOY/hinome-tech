@@ -2,6 +2,7 @@ import { createDecipheriv, createHash, timingSafeEqual } from 'node:crypto';
 
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 const message = /^om_[A-Za-z0-9_-]{4,120}$/;
+const chat = /^oc_[A-Za-z0-9_-]{4,120}$/;
 const event = /^[\da-z_-]{8,128}$/i;
 const fiveMinutes = 300_000;
 const actions = new Set(['approve', 'open_opinion', 'open_reject', 'back', 'submit_opinion', 'submit_reject']);
@@ -144,6 +145,21 @@ export async function sendReviewCard(api, owner, row) {
     msg_type: 'interactive',
     content: JSON.stringify(reviewCard({ ...row, view: 'main', rev: 0 })),
     uuid: row.key,
+  });
+  if (!message.test(result?.message_id)) throw new Error('Missing Feishu message id');
+  return { messageId: result.message_id };
+}
+
+export async function sendProgressMessage(api, chatId, payload) {
+  if (!chat.test(chatId) || !uuid.test(payload?.id) || !uuid.test(payload?.key) ||
+      typeof payload?.text !== 'string' || !payload.text.trim() || payload.text.length > 4000) {
+    throw new Error('Invalid progress report request');
+  }
+  const result = await api('/im/v1/messages?receive_id_type=chat_id', {
+    receive_id: chatId,
+    msg_type: 'text',
+    content: JSON.stringify({ text: payload.text }),
+    uuid: payload.key,
   });
   if (!message.test(result?.message_id)) throw new Error('Missing Feishu message id');
   return { messageId: result.message_id };

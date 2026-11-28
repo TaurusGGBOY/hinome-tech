@@ -2,6 +2,7 @@ import '../public/resources.js';
 
 const allowedTags = new Set(globalThis.RESOURCE_TAGS);
 
+export const resourceTags = [...allowedTags];
 export const sections = ['实用工具', '百科资料', '影像档案', '亲历回顾', '二创作品'];
 export const receiptPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -48,6 +49,11 @@ export function tagsFrom(value) {
   return tags;
 }
 
+export function editedTags(value) {
+  if (!Array.isArray(value) || value.length > 6) throw new Error('invalid_tags');
+  return [...new Set(value.map((tag) => cleanText(tag, 20)))];
+}
+
 export function existingTags(value) {
   return [...new Set(value.filter((tag) => allowedTags.has(tag)))].slice(0, 6);
 }
@@ -71,7 +77,7 @@ export function editedFields(input) {
   }
   const title = cleanText(input.title, 100);
   const description = cleanText(input.description, 220);
-  const tags = tagsFrom(input.tags);
+  const tags = editedTags(input.tags);
   if ([title, description, ...tags].some((value) =>
     /[<>]|https?:\/\/|[\w.%+-]+@[\w.-]+\.[a-z]{2,}/i.test(value))) {
     throw new Error('invalid_public_text');

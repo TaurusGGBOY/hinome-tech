@@ -1,11 +1,12 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { cardCallback, handleCardAction, sendReviewCard } from './feishu-cards.mjs';
+import { cardCallback, handleCardAction, sendProgressMessage, sendReviewCard } from './feishu-cards.mjs';
 import { bilibiliSource } from './bilibili.mjs';
 
 const {
   BRIDGE_TOKEN, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_OWNER_OPEN_ID, PORT = 8080,
   FEISHU_CALLBACK_ENCRYPT_KEY, FEISHU_CALLBACK_VERIFICATION_TOKEN, CARD_WORKER_URL, CARD_WORKER_TOKEN,
+  FEISHU_PROGRESS_CHAT_ID,
 } = process.env;
 export const definition = '2DD082C8-B2EA-41A2-9406-F7557C17A2B2';
 const base = 'https://open.feishu.cn/open-apis';
@@ -210,6 +211,12 @@ export const server = http.createServer(async (request, response) => {
         return reply(response, 503, { error: 'Card delivery unavailable' });
       }
       return reply(response, 200, await sendReviewCard(feishuApi, FEISHU_OWNER_OPEN_ID, await bodyFrom(request)));
+    }
+    if (request.method === 'POST' && request.url === '/progress') {
+      if (!FEISHU_PROGRESS_CHAT_ID) {
+        return reply(response, 503, { error: 'Progress reporting unavailable' });
+      }
+      return reply(response, 200, await sendProgressMessage(feishuApi, FEISHU_PROGRESS_CHAT_ID, await bodyFrom(request)));
     }
     if (request.method === 'POST' && request.url === '/approvals') {
       return reply(response, 200, await startApproval(feishu, FEISHU_OWNER_OPEN_ID, await bodyFrom(request)));

@@ -105,7 +105,7 @@ async function webpageContent(response) {
     let embeddedVideo = false;
     const rewriter = new HTMLRewriter()
       .on('title', { text(node) { if (title.length < 180) title += node.text; } })
-      .on('video, iframe[src*="youtube"], iframe[src*="bilibili"], iframe[src*="douyin"]', {
+      .on('video[src], video source[src], iframe[src*="youtube"], iframe[src*="bilibili"], iframe[src*="douyin"]', {
         element() { embeddedVideo = true; },
       })
       .on('header, nav, aside, footer, form, script, style, noscript, [hidden], [aria-hidden="true"]', {
