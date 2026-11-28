@@ -43,6 +43,14 @@ globalThis.RESOURCE_GROUPS = [
         aliases: ['hinome-subtitles', '中日字幕'],
         url: 'https://hinome-subtitles.pages.dev/',
       },
+      {
+        title: '火羽ひのめ · 直播存档',
+        icon: 'replay',
+        description: '中日对照直播逐字稿、日记、摘录与全库检索。',
+        tags: ['直播存档', '逐字稿', '双语字幕', '摘录'],
+        aliases: ['live-archive', 'konohana-saku8', '直播日记', '全库检索'],
+        url: 'https://konohana-saku8.github.io/live-archive/',
+      },
     ],
   },
   {

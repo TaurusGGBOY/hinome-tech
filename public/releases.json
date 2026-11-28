@@ -1,5 +1,18 @@
 [
   {
+    "version": "v0.4.15",
+    "date": "2026-11-28",
+    "title": "收录直播存档",
+    "resources": [
+      {
+        "title": "火羽ひのめ · 直播存档",
+        "section": "实用工具",
+        "description": "中日对照直播逐字稿、日记、摘录与全库检索。",
+        "url": "https://konohana-saku8.github.io/live-archive/"
+      }
+    ]
+  },
+  {
     "version": "v0.4.14",
     "date": "2026-11-28",
     "title": "资源收录",
