@@ -1,5 +1,18 @@
 [
   {
+    "version": "v0.4.14",
+    "date": "2026-11-28",
+    "title": "资源收录",
+    "resources": [
+      {
+        "title": "日之目结界",
+        "url": "https://se-barrier.top/",
+        "section": "实用工具",
+        "description": "公屏监测与守护平台"
+      }
+    ]
+  },
+  {
     "version": "v0.4.13",
     "date": "2026-11-26",
     "title": "精简窄屏卡片简介",

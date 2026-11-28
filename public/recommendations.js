@@ -14,5 +14,17 @@ window.HINOME_RECOMMENDATIONS = [
     "section": "二创作品",
     "description": "火羽故事 MV，串起校园、深夜直播与万舰庆典。",
     "tags": []
+  },
+  {
+    "id": "63cc1ff6-c3ae-46fa-a02d-4b7d4e893361",
+    "url": "https://se-barrier.top/",
+    "title": "日之目结界",
+    "section": "实用工具",
+    "description": "公屏监测与守护平台",
+    "tags": [
+      "直播数据",
+      "弹幕",
+      "直播回放"
+    ]
   }
 ];
